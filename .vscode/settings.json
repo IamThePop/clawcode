@@ -56,5 +56,5 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "ClawCodeGame1.sln"
+    "dotnet.defaultSolution": "clawcode.sln"
 }
