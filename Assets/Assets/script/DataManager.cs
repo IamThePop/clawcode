@@ -7,6 +7,11 @@ public class DataManager : MonoBehaviour
     // --- CONNECT TO API ---
     public APIManager apiManager; // Drag APIManager here in Inspector
 
+    [System.Serializable]
+    public class ErrorListWrapper
+    {
+    public List<ErrorDetail> errorDetails;
+    }
     // --- USER DATA ---
     [System.Serializable]
     public class UserDataList
@@ -44,7 +49,7 @@ public class DataManager : MonoBehaviour
     private string errorDetailFilePath;
     
     public static DataManager Instance;
-
+    public List<ErrorDetail> errorDetails;
     private void Awake()
     {
         // 1. Singleton Pattern
@@ -127,7 +132,7 @@ public class DataManager : MonoBehaviour
         // 2. Save to Local List
         userList.users.Add(newUser);
         SaveUserData();
-
+        
         // 3. Process Error Details
         foreach (ErrorDetail err in sessionErrors)
         {
@@ -141,6 +146,7 @@ public class DataManager : MonoBehaviour
             err.log_id = newLogID; 
 
             errorDetailList.errorDetails.Add(err);
+            errorDetails.Add(err);
         }
         SaveErrorDetails();
 
@@ -149,8 +155,20 @@ public class DataManager : MonoBehaviour
         // 4. SEND TO LARAVEL (API)
         if (apiManager != null)
         {
+            // 1. Create the wrapper instance
+ErrorListWrapper wrapper = new ErrorListWrapper();
+
+// 2. Assign your list to the wrapper's field
+wrapper.errorDetails = this.errorDetails;
+
+// 3. Serialize the wrapper
+string jsonerrorToSend = JsonUtility.ToJson(wrapper);
+
+Debug.Log(jsonerrorToSend); 
+// Now it will show: {"errorDetails":[{"detail_id":1,...}, ...]}
+            
             string jsonToSend = JsonUtility.ToJson(newUser);
-            apiManager.UploadUserData(jsonToSend);
+            apiManager.UploadUserData(jsonToSend,jsonerrorToSend);
         }
         else
         {

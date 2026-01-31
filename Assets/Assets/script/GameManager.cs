@@ -62,6 +62,8 @@ public class GameManager : MonoBehaviour
     private int commandCounter = 0;         
     private List<ErrorDetail> sessionErrors = new List<ErrorDetail>();
 
+    public GameObject clawimage;
+
     void Start()
     {
         // 1. Start Timer
@@ -138,6 +140,7 @@ public class GameManager : MonoBehaviour
     { 
         // Called when user clicks "OK" on the Start Popup
         if (startPanel) startPanel.SetActive(false); 
+        clawimage.SetActive(true);
     }
     
     public void RandomizeMission() 
@@ -354,6 +357,7 @@ public class GameManager : MonoBehaviour
         if (errorPanel == null) return;
 
         errorPanel.SetActive(true);
+        clawimage.SetActive(false);
         if(errorUserCodeText) errorUserCodeText.text = userCode;
         if(errorSuggestionText) errorSuggestionText.text = suggest;
 
@@ -383,6 +387,7 @@ public class GameManager : MonoBehaviour
             codeInputField.ActivateInputField(); 
             codeInputField.caretPosition = codeInputField.text.Length;
         }
+        clawimage.SetActive(true);
     }
 
     // --- KEY FUNCTION: LINKS DATA TO DATABASE ---
@@ -418,6 +423,7 @@ public class GameManager : MonoBehaviour
                 if (winDollNameText) winDollNameText.text = currentMission;
                 if (winDollDetailText && dataIndex < allDollDescriptions.Length) winDollDetailText.text = allDollDescriptions[dataIndex];
             }
+            clawimage.SetActive(false);
         }
         else
         {
@@ -429,6 +435,7 @@ public class GameManager : MonoBehaviour
                     else loseDollImage.sprite = defaultLoseSprite;
                 }
             }
+            clawimage.SetActive(false);
         }
     }
 

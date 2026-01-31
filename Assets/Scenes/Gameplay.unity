@@ -2883,6 +2883,7 @@ MonoBehaviour:
   errorDescText: {fileID: 2129913657}
   closeErrorButton: {fileID: 725630784}
   currentMission: 
+  clawimage: {fileID: 1424995407}
 --- !u!4 &1036032319
 Transform:
   m_ObjectHideFlags: 0
@@ -3585,7 +3586,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1424995408
 Transform:
   m_ObjectHideFlags: 0
