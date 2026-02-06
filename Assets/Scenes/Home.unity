@@ -173,6 +173,7 @@ MonoBehaviour:
     errorTypes: []
   errorDetailList:
     errorDetails: []
+  errorDetails: []
   currentLogID: 0
 --- !u!4 &143396241
 Transform:
@@ -758,8 +759,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: -815}
-  m_SizeDelta: {x: 1393.18, y: 542.78}
+  m_AnchoredPosition: {x: 29, y: -807}
+  m_SizeDelta: {x: 1500.71, y: 584.67}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1844554842
 MonoBehaviour:
