@@ -1668,7 +1668,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 514896487}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1937349978}
+        m_TargetAssemblyTypeName: HomeSoundController, Assembly-CSharp
+        m_MethodName: PlayClickSound
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -2569,7 +2581,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 837652070}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1937349978}
+        m_TargetAssemblyTypeName: HomeSoundController, Assembly-CSharp
+        m_MethodName: PlayClickSound
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!1 &874971421
 GameObject:
   m_ObjectHideFlags: 0
@@ -2920,7 +2944,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   codeInputField: {fileID: 1459483779}
   claw: {fileID: 1495731637}
-  clawimage: {fileID: 0}
   dollPrefabUI: {fileID: 6453651040256211013, guid: b0888c27bcb6148c092a598b466cd570, type: 3}
   gameplayArea: {fileID: 1615307753}
   topRowSpots:
@@ -2981,6 +3004,7 @@ MonoBehaviour:
   errorDescText: {fileID: 2129913657}
   closeErrorButton: {fileID: 725630784}
   currentMission: 
+  clawimage: {fileID: 1424995407}
 --- !u!4 &1036032319
 Transform:
   m_ObjectHideFlags: 0
@@ -4120,7 +4144,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1474574357}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1937349978}
+        m_TargetAssemblyTypeName: HomeSoundController, Assembly-CSharp
+        m_MethodName: PlayClickSound
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!1 &1487149682
 GameObject:
   m_ObjectHideFlags: 0
@@ -4254,7 +4290,7 @@ MonoBehaviour:
   stepSize: 35
   leftLimit: -350
   rightLimit: 350
-  topY: 400
+  topY: 380
   bottomY: -200
   gripDistance: 80
 --- !u!1 &1546256969
@@ -4376,7 +4412,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1546256971}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1937349978}
+        m_TargetAssemblyTypeName: HomeSoundController, Assembly-CSharp
+        m_MethodName: PlayClickSound
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!1 &1575189343
 GameObject:
   m_ObjectHideFlags: 0
@@ -5019,6 +5067,69 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1914805132}
   m_CullTransparentMesh: 1
+--- !u!1 &1937349977
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1937349980}
+  - component: {fileID: 1937349979}
+  - component: {fileID: 1937349978}
+  m_Layer: 0
+  m_Name: _AudioManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1937349978
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1937349977}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cea062924112a40fd9e582107d6a8955, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  audioSource: {fileID: 0}
+  clickSound: {fileID: 8300000, guid: 746f489143acf4d6caebe58b83a7993c, type: 3}
+--- !u!114 &1937349979
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1937349977}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c7e8fda36213a428b8ea439c4060647b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  sfxSource: {fileID: 0}
+  clickClip: {fileID: 0}
+  bgmSource: {fileID: 0}
+  bgmClip: {fileID: 8300000, guid: 2bc222002ebf440fd8ba88b3105c048c, type: 3}
+--- !u!4 &1937349980
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1937349977}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 90}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1970692833
 GameObject:
   m_ObjectHideFlags: 0
@@ -5584,3 +5695,4 @@ SceneRoots:
   - {fileID: 507816346}
   - {fileID: 1036032319}
   - {fileID: 1062288543}
+  - {fileID: 1937349980}
