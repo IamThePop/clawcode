@@ -22,13 +22,12 @@ public class GameManager : MonoBehaviour
     public TextMeshProUGUI missionTextUI;
     
     [Header("Doll Database")]
-    // IMPOTANT: These names must match DataManager names exactly!
     public string[] allDollNames;        
     public Sprite[] allDollSprites;      
     public string[] allDollDescriptions; 
 
     [Header("Popups UI")]
-    public GameObject startPanel;       // The "Start Mission" Popup
+    public GameObject startPanel;       
     public Image startDollImage;
     public TextMeshProUGUI startDollName;
     
@@ -42,13 +41,13 @@ public class GameManager : MonoBehaviour
     public Sprite defaultLoseSprite;
 
     [Header("Tutorial UI")]
-    public GameObject tutorialPanel;    // Panel ใหญ่สุด
-    public GameObject tutorialPage1;    // หน้า 1
-    public GameObject tutorialPage2;    // หน้า 2
-    public Button tutNextBtn1;          // ปุ่ม Next ในหน้า 1
-    public Button tutBackBtn;           // ปุ่ม Back ในหน้า 2
-    public Button tutFinishBtn;         // ปุ่ม Next (เตรียมตัว) ในหน้า 2
-    public Button tutCloseXBtn;         // ปุ่ม X มุมขวาบน
+    public GameObject tutorialPanel;    
+    public GameObject tutorialPage1;    
+    public GameObject tutorialPage2;    
+    public Button tutNextBtn1;          
+    public Button tutBackBtn;           
+    public Button tutFinishBtn;         
+    public Button tutCloseXBtn;         
 
     [Header("Error Popup UI")]
     public GameObject errorPanel;           
@@ -58,15 +57,21 @@ public class GameManager : MonoBehaviour
     public TextMeshProUGUI errorDescText;   
     public Button closeErrorButton;         
 
+    [Header("Audio Settings (เสียงระบบ)")]
+    public AudioSource uiAudioSource;       // ลำโพงสำหรับ UI เกม
+    public AudioClip buttonClickSound;      // 1. เสียงปุ่มกดทั่วไป
+    public AudioClip winSound;              // 2. เสียง Mission Complete
+    public AudioClip loseSound;             // 2. เสียง Mission Fail
+    public AudioClip codeCorrectSound;      // 5. เสียงพิมโค้ดถูกต้อง
+    public AudioClip codeErrorSound;        // 5. เสียงพิมโค้ดผิด (เด้ง Error)
+
     public string currentMission;
     private bool isExecuting = false;
     private List<GameObject> spawnedDolls = new List<GameObject>();
 
-    // History Lock Variables
     private string protectedPrefix = ""; 
     private string lastValidText = "";   
 
-    // --- DATA COLLECTION VARIABLES ---
     private float startTime;                
     private int commandCounter = 0;         
     private List<ErrorDetail> sessionErrors = new List<ErrorDetail>();
@@ -75,21 +80,17 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-        // 1. Start Timer (Reset later when tutorial ends)
         startTime = Time.time;
         commandCounter = 0;
         sessionErrors = new List<ErrorDetail>();
 
-        // 2. Hide Result Panels & Start Panel (Hide start panel first because tutorial comes first)
         if (winPanel) winPanel.SetActive(false);
         if (losePanel) losePanel.SetActive(false);
         if (errorPanel) errorPanel.SetActive(false);
         if (startPanel) startPanel.SetActive(false); 
 
-        // 3. Hide Claw initially (Tutorial is covering it)
         if (clawimage) clawimage.SetActive(false);
 
-        // 4. Pick the Target Doll (Mission)
         RandomizeMission();
 
         if (closeErrorButton) closeErrorButton.onClick.AddListener(CloseErrorPanel);
@@ -101,19 +102,22 @@ public class GameManager : MonoBehaviour
             codeInputField.onValidateInput += ValidateCharInput;
         }
 
-        // 5. Start Tutorial
         SetupTutorial();
+    }
+
+    // --- เพิ่มฟังก์ชันไว้ให้ลากใช้กับปุ่ม UI (Button Click) ---
+    public void PlayButtonSound()
+    {
+        if (uiAudioSource && buttonClickSound) uiAudioSource.PlayOneShot(buttonClickSound);
     }
 
     void SetupTutorial()
     {
-        // เชื่อมปุ่มต่างๆ เข้ากับฟังก์ชัน
         if(tutNextBtn1) tutNextBtn1.onClick.AddListener(GoToPage2);
         if(tutBackBtn) tutBackBtn.onClick.AddListener(GoToPage1);
         if(tutFinishBtn) tutFinishBtn.onClick.AddListener(EndTutorial);
         if(tutCloseXBtn) tutCloseXBtn.onClick.AddListener(EndTutorial);
 
-        // เปิด Tutorial หน้าแรก
         if (tutorialPanel)
         {
             tutorialPanel.SetActive(true);
@@ -123,28 +127,28 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            // ถ้าลืมใส่ TutorialPanel ให้ข้ามไปเริ่มเกมเลย
             EndTutorial();
         }
     }
 
     void GoToPage1()
     {
+        PlayButtonSound(); // เสียงปุ่ม
         if(tutorialPage1) tutorialPage1.SetActive(true);
         if(tutorialPage2) tutorialPage2.SetActive(false);
     }
 
     void GoToPage2()
     {
+        PlayButtonSound(); // เสียงปุ่ม
         if(tutorialPage1) tutorialPage1.SetActive(false);
         if(tutorialPage2) tutorialPage2.SetActive(true);
     }
 
     void EndTutorial()
     {
+        PlayButtonSound(); // เสียงปุ่ม
         if (tutorialPanel) tutorialPanel.SetActive(false);
-        
-        // เปิดหน้า Mission Start (เริ่มเกมจริง)
         if (startPanel) startPanel.SetActive(true);
     }
 
@@ -152,7 +156,6 @@ public class GameManager : MonoBehaviour
     {
         if ((Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) && !isExecuting)
         {
-            // ห้ามรันถ้า Tutorial เปิดอยู่
             bool isTutorialActive = tutorialPanel != null && tutorialPanel.activeSelf;
 
             if (codeInputField.isFocused && !errorPanel.activeSelf && !isTutorialActive) 
@@ -161,11 +164,12 @@ public class GameManager : MonoBehaviour
             }
         }
         
-        // Caret Guard
         if (codeInputField.isFocused)
         {
             if (codeInputField.caretPosition < protectedPrefix.Length)
+            {
                 codeInputField.caretPosition = codeInputField.text.Length;
+            }
             
             if (codeInputField.selectionAnchorPosition < protectedPrefix.Length || 
                 codeInputField.selectionFocusPosition < protectedPrefix.Length)
@@ -184,10 +188,10 @@ public class GameManager : MonoBehaviour
 
     void ValidateInputPreservation(string currentText)
     {
-        if (!currentText.StartsWith(protectedPrefix))
+        if (currentText.Length < protectedPrefix.Length || !currentText.StartsWith(protectedPrefix))
         {
-            codeInputField.text = lastValidText;
-            codeInputField.caretPosition = codeInputField.text.Length;
+            codeInputField.SetTextWithoutNotify(lastValidText);
+            codeInputField.caretPosition = lastValidText.Length;
         }
         else
         {
@@ -197,12 +201,9 @@ public class GameManager : MonoBehaviour
 
     public void OnClickStartGame() 
     { 
-        // Called when user clicks "OK" on the Start Popup
+        PlayButtonSound(); // เสียงปุ่ม
         if (startPanel) startPanel.SetActive(false); 
-        
-        // เริ่มจับเวลาจริงจังตรงนี้ (หลังกด Start Mission)
         startTime = Time.time; 
-        
         if (clawimage) clawimage.SetActive(true);
     }
     
@@ -210,21 +211,14 @@ public class GameManager : MonoBehaviour
     {
         if (allDollNames.Length == 0) return;
 
-        // 1. Randomly pick a doll index
         int missionIndex = Random.Range(0, allDollNames.Length);
-        
-        // 2. Set the Current Mission Name
         currentMission = allDollNames[missionIndex];
 
-        // 3. Update UI
         if (missionImageUI) { missionImageUI.sprite = allDollSprites[missionIndex]; missionImageUI.preserveAspect = true; }
         if (missionTextUI) missionTextUI.text = currentMission;
-        
-        // 4. Update the Start Popup
         if (startDollImage) { startDollImage.sprite = allDollSprites[missionIndex]; startDollImage.preserveAspect = true; }
         if (startDollName) startDollName.text = currentMission;
         
-        // 5. Spawn dolls into the claw machine
         SpawnDolls(missionIndex);
     }
     
@@ -237,7 +231,6 @@ public class GameManager : MonoBehaviour
         List<Transform> availableBottom = new List<Transform>(bottomRowSpots);
         List<Transform> allRemainingSpots = new List<Transform>();
 
-        // Ensure the mission doll is in the top row
         if (availableTop.Count > 0) {
             int randPos = Random.Range(0, availableTop.Count);
             CreateDollUI(missionIndex, availableTop[randPos]);
@@ -247,7 +240,6 @@ public class GameManager : MonoBehaviour
         allRemainingSpots.AddRange(availableTop);
         allRemainingSpots.AddRange(availableBottom);
 
-        // Fill remaining spots
         foreach (Transform spot in allRemainingSpots) {
             int randomDollIndex;
             do { randomDollIndex = Random.Range(0, allDollNames.Length); } 
@@ -274,7 +266,7 @@ public class GameManager : MonoBehaviour
     public void OnRunCode()
     {
         if (isExecuting) return;
-        commandCounter++; // Count the run command
+        commandCounter++; 
         StartCoroutine(ExecuteLastLineOnly());
     }
 
@@ -301,7 +293,7 @@ public class GameManager : MonoBehaviour
             if (!rawLine.EndsWith(";")) 
             {
                 ShowError(8, "MissingSemicolon", rawLine, rawLine + ";", currentLineNum);
-                isExecuting = false; yield break;
+                LockAndPrepareNewLine(); yield break; 
             }
 
             string commandFull = rawLine.Substring(0, rawLine.Length - 1).Trim(); 
@@ -327,7 +319,6 @@ public class GameManager : MonoBehaviour
 
             string[] validCommands = { "GoLeft", "GoRight", "MoveLeft", "MoveRight", "MoveDown", "Grip" };
 
-            // Check Case Sensitive
             bool caseMatch = validCommands.Any(x => x.Equals(cmdName, System.StringComparison.OrdinalIgnoreCase));
             bool exactMatch = validCommands.Contains(cmdName);
 
@@ -335,27 +326,24 @@ public class GameManager : MonoBehaviour
             {
                 string correctCmd = validCommands.First(x => x.Equals(cmdName, System.StringComparison.OrdinalIgnoreCase));
                 ShowError(2, "CaseSensitiveError", rawLine, correctCmd + "(...);", currentLineNum);
-                isExecuting = false; yield break;
+                LockAndPrepareNewLine(); yield break; 
             }
 
-            // Check Misspell
             if (!exactMatch)
             {
-                 // Simple guess logic
                   string guess = "GoLeft";
                   if (cmdName.Contains("Right")) guess = "GoRight";
                   if (cmdName.Contains("Down")) guess = "MoveDown";
                   if (cmdName.Contains("Grip")) guess = "Grip";
                   ShowError(1, "Misspell", rawLine, guess + "(...);", currentLineNum);
-                  isExecuting = false; yield break;
+                  LockAndPrepareNewLine(); yield break; 
             }
 
-            // Check Parentheses
             if (!hasOpenParen || !hasCloseParen)
             {
                 if (!hasOpenParen) ShowError(3, "MissingParentheses", rawLine, cmdName + "();", currentLineNum);
                 else ShowError(4, "UnclosedParenthesis", rawLine, cmdName + "();", currentLineNum);
-                isExecuting = false; yield break;
+                LockAndPrepareNewLine(); yield break; 
             }
 
             bool needNumber = (cmdName == "GoLeft" || cmdName == "GoRight" || cmdName == "MoveLeft" || cmdName == "MoveRight");
@@ -366,21 +354,24 @@ public class GameManager : MonoBehaviour
                 if (string.IsNullOrEmpty(paramContent))
                 {
                     ShowError(5, "MissingParameter", rawLine, cmdName + "(1);", currentLineNum);
-                    isExecuting = false; yield break;
+                    LockAndPrepareNewLine(); yield break; 
                 }
 
                 if (!int.TryParse(paramContent, out int val))
                 {
                     if (paramContent.Contains(",")) ShowError(6, "ExtraParameter", rawLine, cmdName + "(1);", currentLineNum);
                     else ShowError(7, "InvalidParameter", rawLine, cmdName + "(1);", currentLineNum);
-                    isExecuting = false; yield break;
+                    LockAndPrepareNewLine(); yield break; 
                 }
 
                 if (val < 0 || val > 10)
                 {
                     ShowError(7, "InvalidParameter", rawLine, "ใส่เลข 1-10", currentLineNum);
-                    isExecuting = false; yield break;
+                    LockAndPrepareNewLine(); yield break; 
                 }
+
+                // --- เล่นเสียงพิมพ์ถูก ---
+                if (uiAudioSource && codeCorrectSound) uiAudioSource.PlayOneShot(codeCorrectSound);
 
                 if (cmdName.Contains("Left")) yield return claw.MoveHorizontal(-val);
                 else yield return claw.MoveHorizontal(val);
@@ -390,37 +381,49 @@ public class GameManager : MonoBehaviour
                 if (!string.IsNullOrEmpty(paramContent))
                 {
                     ShowError(6, "ExtraParameter", rawLine, cmdName + "();", currentLineNum);
-                    isExecuting = false; yield break;
+                    LockAndPrepareNewLine(); yield break; 
                 }
+
+                // --- เล่นเสียงพิมพ์ถูก ---
+                if (uiAudioSource && codeCorrectSound) uiAudioSource.PlayOneShot(codeCorrectSound);
 
                 if (cmdName == "MoveDown") yield return claw.MoveDown();
                 else if (cmdName == "Grip") { yield return claw.GripAndUp(); CheckResult(); }
             }
         }
 
-        if (!codeInputField.text.EndsWith("\n")) codeInputField.text += "\n";
+        LockAndPrepareNewLine(); 
+    }
+
+    void LockAndPrepareNewLine()
+    {
+        if (!codeInputField.text.EndsWith("\n")) 
+        {
+            codeInputField.SetTextWithoutNotify(codeInputField.text + "\n");
+        }
+        
         protectedPrefix = codeInputField.text;
         lastValidText = protectedPrefix;
+        
         codeInputField.caretPosition = codeInputField.text.Length;
-        codeInputField.ActivateInputField(); 
-
         isExecuting = false;
     }
 
     void ShowError(int id, string codeType, string userCode, string suggest, int lineNum = 0)
     {
-        // 1. Record Error to List
+        // --- เล่นเสียงเวลาพิมพ์โค้ดผิด (Error) ---
+        if (uiAudioSource && codeErrorSound) uiAudioSource.PlayOneShot(codeErrorSound);
+
         ErrorDetail newErr = new ErrorDetail();
         newErr.line_number = lineNum;
         newErr.command_text = userCode;
         newErr.error_type = codeType; 
         sessionErrors.Add(newErr);
 
-        // 2. Show UI
         if (errorPanel == null) return;
 
         errorPanel.SetActive(true);
-        if (clawimage) clawimage.SetActive(false); // Hide claw
+        if (clawimage) clawimage.SetActive(false); 
         
         if(errorUserCodeText) errorUserCodeText.text = userCode;
         if(errorSuggestionText) errorSuggestionText.text = suggest;
@@ -446,15 +449,17 @@ public class GameManager : MonoBehaviour
 
     void CloseErrorPanel() 
     { 
+        PlayButtonSound(); // เล่นเสียงตอนปิดป๊อปอัพ
         if (errorPanel) errorPanel.SetActive(false);
         if (codeInputField) {
             codeInputField.ActivateInputField(); 
             codeInputField.caretPosition = codeInputField.text.Length;
+            codeInputField.selectionAnchorPosition = codeInputField.text.Length;
+            codeInputField.selectionFocusPosition = codeInputField.text.Length;
         }
-        if (clawimage) clawimage.SetActive(true); // Show claw
+        if (clawimage) clawimage.SetActive(true); 
     }
 
-    // --- KEY FUNCTION: LINKS DATA TO DATABASE ---
     void CheckResult()
     {
         string caught = claw.GetCaughtDollName();
@@ -469,7 +474,7 @@ public class GameManager : MonoBehaviour
             int duration = Mathf.RoundToInt(Time.time - startTime);
 
             DataManager.Instance.AddNewUserLog(
-                currentMission,     // THIS IS THE TARGET DOLL NAME
+                currentMission,     
                 commandCounter,     
                 sessionErrors.Count,
                 duration,           
@@ -480,6 +485,9 @@ public class GameManager : MonoBehaviour
 
         if (isWin)
         {
+            // --- เล่นเสียง Mission Complete ---
+            if (uiAudioSource && winSound) uiAudioSource.PlayOneShot(winSound);
+
             if (winPanel)
             {
                 winPanel.SetActive(true);
@@ -491,6 +499,9 @@ public class GameManager : MonoBehaviour
         }
         else
         {
+            // --- เล่นเสียง Mission Fail ---
+            if (uiAudioSource && loseSound) uiAudioSource.PlayOneShot(loseSound);
+
             if (losePanel)
             {
                 losePanel.SetActive(true);
@@ -505,7 +516,7 @@ public class GameManager : MonoBehaviour
 
     public void OnClickReplay()
     {
-        // Reset Data for new round
+        PlayButtonSound(); // เสียงตอนกด Replay
         startTime = Time.time;
         commandCounter = 0;
         sessionErrors.Clear();
@@ -516,7 +527,7 @@ public class GameManager : MonoBehaviour
         if (errorPanel) errorPanel.SetActive(false);
         if (codeInputField) 
         {
-            codeInputField.text = "";
+            codeInputField.SetTextWithoutNotify("");
             protectedPrefix = ""; 
             lastValidText = "";
         }

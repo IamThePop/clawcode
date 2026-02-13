@@ -19,6 +19,11 @@ public class ClawController : MonoBehaviour
 
     [Header("Grip Settings")]
     public float gripDistance = 120f; 
+
+    [Header("Audio Settings (เสียงกลไก)")]
+    public AudioSource clawAudioSource; // ลำโพงที่ติดอยู่กับตัวคีบ
+    public AudioClip moveSound;         // 3. เสียงเวลาตัวคีบเลื่อน (ใส่เสียงมอเตอร์)
+    public AudioClip gripSound;         // 4. เสียงเวลาสั่ง Grip (เสียงหนีบ/ฉับ)
     
     private Transform caughtDoll = null;
 
@@ -39,7 +44,14 @@ public class ClawController : MonoBehaviour
         float targetX = clawRect.anchoredPosition.x + (steps * stepSize);
         targetX = Mathf.Clamp(targetX, leftLimit, rightLimit);
 
-        // ขยับแกน X
+        // --- เล่นเสียงตอนเริ่มเลื่อน ---
+        if (clawAudioSource && moveSound) 
+        {
+            clawAudioSource.clip = moveSound;
+            clawAudioSource.loop = true; // เล่นวนจนกว่าจะเลื่อนเสร็จ
+            clawAudioSource.Play();
+        }
+
         while (Mathf.Abs(clawRect.anchoredPosition.x - targetX) > 1f)
         {
             float newX = Mathf.MoveTowards(clawRect.anchoredPosition.x, targetX, moveSpeed * Time.deltaTime);
@@ -47,7 +59,9 @@ public class ClawController : MonoBehaviour
             yield return null;
         }
         
-        // ล็อคตำแหน่งปลายทางให้เป๊ะ
+        // --- หยุดเสียงเมื่อถึงเป้าหมาย ---
+        if (clawAudioSource) clawAudioSource.Stop();
+
         clawRect.anchoredPosition = new Vector2(targetX, clawRect.anchoredPosition.y);
     }
 
@@ -55,35 +69,57 @@ public class ClawController : MonoBehaviour
     {
         if (clawRect == null) yield break;
         
-        // *** จำค่า X ปัจจุบันไว้แน่นๆ ***
         float fixedX = clawRect.anchoredPosition.x;
         
-        // เลื่อนลง (บังคับ X ให้เท่ากับ fixedX ตลอดเวลา)
+        // --- เล่นเสียงตอนเริ่มเลื่อนลง ---
+        if (clawAudioSource && moveSound) 
+        {
+            clawAudioSource.clip = moveSound;
+            clawAudioSource.loop = true;
+            clawAudioSource.Play();
+        }
+
         while (Mathf.Abs(clawRect.anchoredPosition.y - bottomY) > 1f)
         {
             float newY = Mathf.MoveTowards(clawRect.anchoredPosition.y, bottomY, moveSpeed * Time.deltaTime);
-            clawRect.anchoredPosition = new Vector2(fixedX, newY); // ใช้ fixedX ห้ามเปลี่ยน
+            clawRect.anchoredPosition = new Vector2(fixedX, newY); 
             yield return null;
         }
         
+        // --- หยุดเสียง ---
+        if (clawAudioSource) clawAudioSource.Stop();
+
         clawRect.anchoredPosition = new Vector2(fixedX, bottomY);
     }
 
     public IEnumerator GripAndUp()
     {
+        // --- เล่นเสียงตอนสั่ง Grip ---
+        if (clawAudioSource && gripSound) clawAudioSource.PlayOneShot(gripSound);
+
         CheckForDoll();
         yield return new WaitForSeconds(0.5f); 
 
-        // ดึงขึ้น (จำค่า X ไว้อีกที)
         float fixedX = clawRect.anchoredPosition.x;
+
+        // --- เล่นเสียงตอนดึงตัวคีบกลับขึ้นไป ---
+        if (clawAudioSource && moveSound) 
+        {
+            clawAudioSource.clip = moveSound;
+            clawAudioSource.loop = true;
+            clawAudioSource.Play();
+        }
 
         while (Mathf.Abs(clawRect.anchoredPosition.y - topY) > 1f)
         {
             float newY = Mathf.MoveTowards(clawRect.anchoredPosition.y, topY, moveSpeed * Time.deltaTime);
-            clawRect.anchoredPosition = new Vector2(fixedX, newY); // ใช้ fixedX
+            clawRect.anchoredPosition = new Vector2(fixedX, newY); 
             yield return null;
         }
         
+        // --- หยุดเสียง ---
+        if (clawAudioSource) clawAudioSource.Stop();
+
         clawRect.anchoredPosition = new Vector2(fixedX, topY);
     }
 
@@ -111,7 +147,6 @@ public class ClawController : MonoBehaviour
         {
             caughtDoll = target.transform;
             caughtDoll.SetParent(this.transform); 
-            // รีเซ็ตตำแหน่งให้ห้อยตรงกลาง (X=0)
             caughtDoll.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, -120); 
         }
     }
