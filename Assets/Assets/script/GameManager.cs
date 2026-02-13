@@ -58,16 +58,25 @@ public class GameManager : MonoBehaviour
     public Button closeErrorButton;         
 
     [Header("Audio Settings (เสียงระบบ)")]
-    public AudioSource uiAudioSource;       // ลำโพงสำหรับ UI เกม
-    public AudioClip buttonClickSound;      // 1. เสียงปุ่มกดทั่วไป
-    public AudioClip winSound;              // 2. เสียง Mission Complete
-    public AudioClip loseSound;             // 2. เสียง Mission Fail
-    public AudioClip codeCorrectSound;      // 5. เสียงพิมโค้ดถูกต้อง
-    public AudioClip codeErrorSound;        // 5. เสียงพิมโค้ดผิด (เด้ง Error)
+    public AudioSource uiAudioSource;       
+    public AudioClip buttonClickSound;      
+    public AudioClip winSound;              
+    public AudioClip loseSound;             
+    public AudioClip codeCorrectSound;      
+    public AudioClip codeErrorSound;        
+    public AudioClip dollDropSound;     // (เพิ่มใหม่) เสียงตุ๊กตาร่วงลงพื้น (ถ้ามี)
+
+    [Header("Drop Animation Settings")]
+    public RectTransform dropBoxTarget;     
+    public float dropZoneX = -350f;         
+    public float spawnDropOffset = 800f; // (เพิ่มใหม่) ความสูงที่ตุ๊กตาจะซ่อนตัวก่อนร่วงลงมา
 
     public string currentMission;
     private bool isExecuting = false;
     private List<GameObject> spawnedDolls = new List<GameObject>();
+    
+    // (เพิ่มใหม่) เอาไว้จำตำแหน่งปลายทางที่ตุ๊กตาต้องตกลงมา
+    private Dictionary<GameObject, Vector3> dollTargetPositions = new Dictionary<GameObject, Vector3>();
 
     private string protectedPrefix = ""; 
     private string lastValidText = "";   
@@ -105,7 +114,6 @@ public class GameManager : MonoBehaviour
         SetupTutorial();
     }
 
-    // --- เพิ่มฟังก์ชันไว้ให้ลากใช้กับปุ่ม UI (Button Click) ---
     public void PlayButtonSound()
     {
         if (uiAudioSource && buttonClickSound) uiAudioSource.PlayOneShot(buttonClickSound);
@@ -133,21 +141,21 @@ public class GameManager : MonoBehaviour
 
     void GoToPage1()
     {
-        PlayButtonSound(); // เสียงปุ่ม
+        PlayButtonSound(); 
         if(tutorialPage1) tutorialPage1.SetActive(true);
         if(tutorialPage2) tutorialPage2.SetActive(false);
     }
 
     void GoToPage2()
     {
-        PlayButtonSound(); // เสียงปุ่ม
+        PlayButtonSound(); 
         if(tutorialPage1) tutorialPage1.SetActive(false);
         if(tutorialPage2) tutorialPage2.SetActive(true);
     }
 
     void EndTutorial()
     {
-        PlayButtonSound(); // เสียงปุ่ม
+        PlayButtonSound(); 
         if (tutorialPanel) tutorialPanel.SetActive(false);
         if (startPanel) startPanel.SetActive(true);
     }
@@ -157,7 +165,6 @@ public class GameManager : MonoBehaviour
         if ((Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) && !isExecuting)
         {
             bool isTutorialActive = tutorialPanel != null && tutorialPanel.activeSelf;
-
             if (codeInputField.isFocused && !errorPanel.activeSelf && !isTutorialActive) 
             {
                 OnRunCode();
@@ -167,9 +174,7 @@ public class GameManager : MonoBehaviour
         if (codeInputField.isFocused)
         {
             if (codeInputField.caretPosition < protectedPrefix.Length)
-            {
                 codeInputField.caretPosition = codeInputField.text.Length;
-            }
             
             if (codeInputField.selectionAnchorPosition < protectedPrefix.Length || 
                 codeInputField.selectionFocusPosition < protectedPrefix.Length)
@@ -193,32 +198,29 @@ public class GameManager : MonoBehaviour
             codeInputField.SetTextWithoutNotify(lastValidText);
             codeInputField.caretPosition = lastValidText.Length;
         }
-        else
-        {
-            lastValidText = currentText;
-        }
+        else lastValidText = currentText;
     }
 
     public void OnClickStartGame() 
     { 
-        PlayButtonSound(); // เสียงปุ่ม
+        PlayButtonSound(); 
         if (startPanel) startPanel.SetActive(false); 
         startTime = Time.time; 
         if (clawimage) clawimage.SetActive(true);
+
+        // --- (ของใหม่) เรียกใช้อนิเมชันตุ๊กตาร่วงลงมา ---
+        StartCoroutine(AnimateDollsFalling());
     }
     
     public void RandomizeMission() 
     {
         if (allDollNames.Length == 0) return;
-
         int missionIndex = Random.Range(0, allDollNames.Length);
         currentMission = allDollNames[missionIndex];
-
         if (missionImageUI) { missionImageUI.sprite = allDollSprites[missionIndex]; missionImageUI.preserveAspect = true; }
         if (missionTextUI) missionTextUI.text = currentMission;
         if (startDollImage) { startDollImage.sprite = allDollSprites[missionIndex]; startDollImage.preserveAspect = true; }
         if (startDollName) startDollName.text = currentMission;
-        
         SpawnDolls(missionIndex);
     }
     
@@ -226,6 +228,7 @@ public class GameManager : MonoBehaviour
     { 
         foreach (GameObject d in spawnedDolls) Destroy(d);
         spawnedDolls.Clear();
+        dollTargetPositions.Clear(); // เคลียร์จุดเดิม
 
         List<Transform> availableTop = new List<Transform>(topRowSpots);
         List<Transform> availableBottom = new List<Transform>(bottomRowSpots);
@@ -251,16 +254,81 @@ public class GameManager : MonoBehaviour
     void CreateDollUI(int index, Transform spot) 
     { 
         GameObject newDoll = Instantiate(dollPrefabUI, gameplayArea);
-        newDoll.transform.position = spot.position;
         
+        // --- (ของใหม่) จำตำแหน่งปลายทาง แล้วจับเลื่อนขึ้นไปข้างบนเพื่อรอร่วง ---
+        Vector3 targetPos = spot.position;
+        dollTargetPositions.Add(newDoll, targetPos);
+        newDoll.transform.position = targetPos + new Vector3(0, spawnDropOffset, 0); // เลื่อนขึ้นไป 800 pixel
+
         Image img = newDoll.GetComponent<Image>();
         if (img) { img.sprite = allDollSprites[index]; img.preserveAspect = true; }
-        
         Doll d = newDoll.GetComponent<Doll>();
         if (d) d.dollName = allDollNames[index];
-        
         newDoll.name = allDollNames[index];
         spawnedDolls.Add(newDoll);
+    }
+
+    // ==================================================
+    // (ของใหม่) อนิเมชันสั่งให้ตุ๊กตาทั้งหมดร่วงลงมาพร้อมกัน
+    // ==================================================
+// ==================================================
+    // อนิเมชันสั่งให้ตุ๊กตาร่วงลงมาแบบกระจายๆ (ไม่พร้อมกัน)
+    // ==================================================
+    IEnumerator AnimateDollsFalling()
+    {
+        // เล่นเสียงหล่นตอนเริ่มเทตุ๊กตา
+        if (uiAudioSource && dollDropSound) uiAudioSource.PlayOneShot(dollDropSound);
+
+        // วนลูปสั่งให้ตุ๊กตาแต่ละตัวแยกกันร่วง
+        foreach (var kvp in dollTargetPositions)
+        {
+            if (kvp.Key != null)
+            {
+                // สุ่มเวลาหน่วง (Delay) ตั้งแต่ 0 ถึง 0.6 วินาที (ปรับให้ร่วงช้า/เร็วตามใจชอบได้)
+                float randomDelay = Random.Range(0f, 0.6f); 
+                
+                // สั่งให้ตุ๊กตาตัวนั้นแยกไปรันอนิเมชันของตัวเอง
+                StartCoroutine(DropSingleDoll(kvp.Key, kvp.Value, randomDelay));
+            }
+        }
+        
+        yield return null;
+    }
+
+    // ฟังก์ชันใหม่: จัดการตุ๊กตาแต่ละตัวให้ร่วงตามเวลาที่สุ่มได้
+    IEnumerator DropSingleDoll(GameObject doll, Vector3 targetPos, float delay)
+    {
+        // 1. รอเวลา Delay ที่สุ่มมา
+        yield return new WaitForSeconds(delay);
+
+        float duration = 0.8f; // ความเร็วในการตกลงมาของแต่ละตัว (วินาที)
+        float t = 0;
+        Vector3 startPos = targetPos + new Vector3(0, spawnDropOffset, 0);
+
+        // 2. เริ่มร่วงลงมาพร้อมเอฟเฟกต์เด้งดึ๋ง
+        while (t < 1f)
+        {
+            // ป้องกันบัคเผื่อตุ๊กตาโดนลบทิ้งไปก่อน
+            if (doll == null) yield break; 
+
+            t += Time.deltaTime / duration;
+            float ease = BounceEaseOut(t); // ดึงสมการเด้งพื้น
+
+            doll.transform.position = Vector3.LerpUnclamped(startPos, targetPos, ease);
+            yield return null;
+        }
+
+        // 3. จับให้ตรงล็อกเป๊ะๆ ตอนจบ
+        if (doll != null) doll.transform.position = targetPos;
+    }
+
+    // สมการคณิตศาสตร์ ทำให้ดูเด้งสมจริงตอนกระทบพื้น (อันเดิม)
+    float BounceEaseOut(float t)
+    {
+        if (t < 1f / 2.75f) { return 7.5625f * t * t; }
+        else if (t < 2f / 2.75f) { t -= 1.5f / 2.75f; return 7.5625f * t * t + 0.75f; }
+        else if (t < 2.5f / 2.75f) { t -= 2.25f / 2.75f; return 7.5625f * t * t + 0.9375f; }
+        else { t -= 2.625f / 2.75f; return 7.5625f * t * t + 0.984375f; }
     }
 
     public void OnRunCode()
@@ -275,7 +343,6 @@ public class GameManager : MonoBehaviour
         isExecuting = true;
         
         string[] lines = codeInputField.text.Split(new char[] { '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
-
         if (lines.Length == 0) { isExecuting = false; yield break; }
 
         string lastLine = lines[lines.Length - 1]; 
@@ -312,10 +379,7 @@ public class GameManager : MonoBehaviour
                     if (pTo > pFrom) paramContent = commandFull.Substring(pFrom, pTo - pFrom).Trim();
                 }
             }
-            else
-            {
-                cmdName = commandFull; 
-            }
+            else cmdName = commandFull; 
 
             string[] validCommands = { "GoLeft", "GoRight", "MoveLeft", "MoveRight", "MoveDown", "Grip" };
 
@@ -370,7 +434,6 @@ public class GameManager : MonoBehaviour
                     LockAndPrepareNewLine(); yield break; 
                 }
 
-                // --- เล่นเสียงพิมพ์ถูก ---
                 if (uiAudioSource && codeCorrectSound) uiAudioSource.PlayOneShot(codeCorrectSound);
 
                 if (cmdName.Contains("Left")) yield return claw.MoveHorizontal(-val);
@@ -384,7 +447,6 @@ public class GameManager : MonoBehaviour
                     LockAndPrepareNewLine(); yield break; 
                 }
 
-                // --- เล่นเสียงพิมพ์ถูก ---
                 if (uiAudioSource && codeCorrectSound) uiAudioSource.PlayOneShot(codeCorrectSound);
 
                 if (cmdName == "MoveDown") yield return claw.MoveDown();
@@ -398,20 +460,16 @@ public class GameManager : MonoBehaviour
     void LockAndPrepareNewLine()
     {
         if (!codeInputField.text.EndsWith("\n")) 
-        {
             codeInputField.SetTextWithoutNotify(codeInputField.text + "\n");
-        }
         
         protectedPrefix = codeInputField.text;
         lastValidText = protectedPrefix;
-        
         codeInputField.caretPosition = codeInputField.text.Length;
         isExecuting = false;
     }
 
     void ShowError(int id, string codeType, string userCode, string suggest, int lineNum = 0)
     {
-        // --- เล่นเสียงเวลาพิมพ์โค้ดผิด (Error) ---
         if (uiAudioSource && codeErrorSound) uiAudioSource.PlayOneShot(codeErrorSound);
 
         ErrorDetail newErr = new ErrorDetail();
@@ -430,7 +488,6 @@ public class GameManager : MonoBehaviour
 
         string title = "";
         string desc = "";
-        
         switch (id)
         {
             case 1: title = "Misspell (สะกดผิด)"; desc = "ในภาษาโปรแกรม ชื่อฟังก์ชันต้องตรงกับที่ประกาศไว้ ทุกตัวอักษร สะกดผิดเพียงตัวเดียวโปรแกรมจะไม่รู้จักคำสั่งนั้น"; break;
@@ -449,7 +506,7 @@ public class GameManager : MonoBehaviour
 
     void CloseErrorPanel() 
     { 
-        PlayButtonSound(); // เล่นเสียงตอนปิดป๊อปอัพ
+        PlayButtonSound(); 
         if (errorPanel) errorPanel.SetActive(false);
         if (codeInputField) {
             codeInputField.ActivateInputField(); 
@@ -468,55 +525,57 @@ public class GameManager : MonoBehaviour
 
         bool isWin = (caught == currentMission);
         
-        // SAVE TO DATABASE
         if (DataManager.Instance != null)
         {
             int duration = Mathf.RoundToInt(Time.time - startTime);
-
-            DataManager.Instance.AddNewUserLog(
-                currentMission,     
-                commandCounter,     
-                sessionErrors.Count,
-                duration,           
-                isWin,              
-                sessionErrors       
-            );
+            DataManager.Instance.AddNewUserLog(currentMission, commandCounter, sessionErrors.Count, duration, isWin, sessionErrors);
         }
 
         if (isWin)
         {
-            // --- เล่นเสียง Mission Complete ---
-            if (uiAudioSource && winSound) uiAudioSource.PlayOneShot(winSound);
-
-            if (winPanel)
+            if (dropBoxTarget != null)
             {
-                winPanel.SetActive(true);
-                if (dataIndex != -1 && winDollImage) { winDollImage.sprite = allDollSprites[dataIndex]; winDollImage.preserveAspect = true; }
-                if (winDollNameText) winDollNameText.text = currentMission;
-                if (winDollDetailText && dataIndex < allDollDescriptions.Length) winDollDetailText.text = allDollDescriptions[dataIndex];
+                StartCoroutine(claw.DropWinDollSequence(dropZoneX, dropBoxTarget, () => {
+                    ShowWinPanel(dataIndex);
+                }));
             }
-            if (clawimage) clawimage.SetActive(false);
+            else ShowWinPanel(dataIndex); 
         }
-        else
+        else ShowLosePanel(dataIndex);
+    }
+
+    void ShowWinPanel(int dataIndex)
+    {
+        if (uiAudioSource && winSound) uiAudioSource.PlayOneShot(winSound);
+
+        if (winPanel)
         {
-            // --- เล่นเสียง Mission Fail ---
-            if (uiAudioSource && loseSound) uiAudioSource.PlayOneShot(loseSound);
-
-            if (losePanel)
-            {
-                losePanel.SetActive(true);
-                if (loseDollImage) {
-                    if (dataIndex != -1) { loseDollImage.sprite = allDollSprites[dataIndex]; loseDollImage.preserveAspect = true; }
-                    else loseDollImage.sprite = defaultLoseSprite;
-                }
-            }
-            if (clawimage) clawimage.SetActive(false);
+            winPanel.SetActive(true);
+            if (dataIndex != -1 && winDollImage) { winDollImage.sprite = allDollSprites[dataIndex]; winDollImage.preserveAspect = true; }
+            if (winDollNameText) winDollNameText.text = currentMission;
+            if (winDollDetailText && dataIndex < allDollDescriptions.Length) winDollDetailText.text = allDollDescriptions[dataIndex];
         }
+        if (clawimage) clawimage.SetActive(false);
+    }
+
+    void ShowLosePanel(int dataIndex)
+    {
+        if (uiAudioSource && loseSound) uiAudioSource.PlayOneShot(loseSound);
+
+        if (losePanel)
+        {
+            losePanel.SetActive(true);
+            if (loseDollImage) {
+                if (dataIndex != -1) { loseDollImage.sprite = allDollSprites[dataIndex]; loseDollImage.preserveAspect = true; }
+                else loseDollImage.sprite = defaultLoseSprite;
+            }
+        }
+        if (clawimage) clawimage.SetActive(false);
     }
 
     public void OnClickReplay()
     {
-        PlayButtonSound(); // เสียงตอนกด Replay
+        PlayButtonSound(); 
         startTime = Time.time;
         commandCounter = 0;
         sessionErrors.Clear();
