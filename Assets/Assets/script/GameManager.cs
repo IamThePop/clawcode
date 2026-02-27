@@ -4,6 +4,7 @@ using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
 using System.Linq; 
+using UnityEngine.SceneManagement; // เพิ่มอันนี้เพื่อใช้คำสั่งเปลี่ยน Scene
 
 public class GameManager : MonoBehaviour
 {
@@ -26,7 +27,7 @@ public class GameManager : MonoBehaviour
     public Sprite[] allDollSprites;      
     public string[] allDollDescriptions; 
 
-    [Header("Popups UI")]
+    [Header("Popups UI (ผลลัพธ์การคีบ)")]
     public GameObject startPanel;       
     public Image startDollImage;
     public TextMeshProUGUI startDollName;
@@ -39,6 +40,16 @@ public class GameManager : MonoBehaviour
     public GameObject losePanel;
     public Image loseDollImage;
     public Sprite defaultLoseSprite;
+
+    [Header("Empty Claw UI (คีบว่าว)")]
+    public GameObject emptyClawPanel;   
+
+    [Header("Code Result UI (หน้าสรุปผลโค้ด)")]
+    public GameObject codeResultPanel;
+    public TextMeshProUGUI totalCommandText;      
+    public TextMeshProUGUI allCommandsText;       
+    public TextMeshProUGUI correctCommandsText;   
+    public TextMeshProUGUI incorrectCommandsText; 
 
     [Header("Tutorial UI")]
     public GameObject tutorialPanel;    
@@ -64,18 +75,19 @@ public class GameManager : MonoBehaviour
     public AudioClip loseSound;             
     public AudioClip codeCorrectSound;      
     public AudioClip codeErrorSound;        
-    public AudioClip dollDropSound;     // (เพิ่มใหม่) เสียงตุ๊กตาร่วงลงพื้น (ถ้ามี)
+    public AudioClip dollDropSound;     
 
     [Header("Drop Animation Settings")]
     public RectTransform dropBoxTarget;     
     public float dropZoneX = -350f;         
-    public float spawnDropOffset = 800f; // (เพิ่มใหม่) ความสูงที่ตุ๊กตาจะซ่อนตัวก่อนร่วงลงมา
+    public float spawnDropOffset = 800f; 
+
+    [Header("Scene Settings")]
+    public string homeSceneName = "Home"; // ชื่อ Scene หน้า Home ของคุณ (แก้ให้ตรงด้วยนะครับ)
 
     public string currentMission;
     private bool isExecuting = false;
     private List<GameObject> spawnedDolls = new List<GameObject>();
-    
-    // (เพิ่มใหม่) เอาไว้จำตำแหน่งปลายทางที่ตุ๊กตาต้องตกลงมา
     private Dictionary<GameObject, Vector3> dollTargetPositions = new Dictionary<GameObject, Vector3>();
 
     private string protectedPrefix = ""; 
@@ -85,6 +97,13 @@ public class GameManager : MonoBehaviour
     private int commandCounter = 0;         
     private List<ErrorDetail> sessionErrors = new List<ErrorDetail>();
 
+    private struct CommandLog
+    {
+        public string commandText;
+        public bool isCorrect;
+    }
+    private List<CommandLog> commandHistory = new List<CommandLog>();
+
     public GameObject clawimage;
 
     void Start()
@@ -92,9 +111,12 @@ public class GameManager : MonoBehaviour
         startTime = Time.time;
         commandCounter = 0;
         sessionErrors = new List<ErrorDetail>();
+        commandHistory.Clear(); 
 
         if (winPanel) winPanel.SetActive(false);
         if (losePanel) losePanel.SetActive(false);
+        if (emptyClawPanel) emptyClawPanel.SetActive(false);
+        if (codeResultPanel) codeResultPanel.SetActive(false);
         if (errorPanel) errorPanel.SetActive(false);
         if (startPanel) startPanel.SetActive(false); 
 
@@ -133,51 +155,36 @@ public class GameManager : MonoBehaviour
             if(tutorialPage2) tutorialPage2.SetActive(false);
             if (clawimage) clawimage.SetActive(false);
         }
-        else
-        {
-            EndTutorial();
-        }
+        else EndTutorial();
     }
 
-    void GoToPage1()
-    {
-        PlayButtonSound(); 
-        if(tutorialPage1) tutorialPage1.SetActive(true);
-        if(tutorialPage2) tutorialPage2.SetActive(false);
-    }
-
-    void GoToPage2()
-    {
-        PlayButtonSound(); 
-        if(tutorialPage1) tutorialPage1.SetActive(false);
-        if(tutorialPage2) tutorialPage2.SetActive(true);
-    }
-
-    void EndTutorial()
-    {
-        PlayButtonSound(); 
-        if (tutorialPanel) tutorialPanel.SetActive(false);
-        if (startPanel) startPanel.SetActive(true);
-    }
+    void GoToPage1() { PlayButtonSound(); if(tutorialPage1) tutorialPage1.SetActive(true); if(tutorialPage2) tutorialPage2.SetActive(false); }
+    void GoToPage2() { PlayButtonSound(); if(tutorialPage1) tutorialPage1.SetActive(false); if(tutorialPage2) tutorialPage2.SetActive(true); }
+    void EndTutorial() { PlayButtonSound(); if (tutorialPanel) tutorialPanel.SetActive(false); if (startPanel) startPanel.SetActive(true); }
 
     void Update()
     {
+        // ==========================================
+        // 3. ระบบคีย์ลัด กด Command/Ctrl + B กลับหน้า Home
+        // ==========================================
+        if ((Input.GetKey(KeyCode.LeftCommand) || Input.GetKey(KeyCode.RightCommand) || 
+             Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) && 
+             Input.GetKeyDown(KeyCode.B))
+        {
+            SceneManager.LoadScene(homeSceneName);
+        }
+
         if ((Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) && !isExecuting)
         {
             bool isTutorialActive = tutorialPanel != null && tutorialPanel.activeSelf;
             if (codeInputField.isFocused && !errorPanel.activeSelf && !isTutorialActive) 
-            {
                 OnRunCode();
-            }
         }
         
         if (codeInputField.isFocused)
         {
-            if (codeInputField.caretPosition < protectedPrefix.Length)
-                codeInputField.caretPosition = codeInputField.text.Length;
-            
-            if (codeInputField.selectionAnchorPosition < protectedPrefix.Length || 
-                codeInputField.selectionFocusPosition < protectedPrefix.Length)
+            if (codeInputField.caretPosition < protectedPrefix.Length) codeInputField.caretPosition = codeInputField.text.Length;
+            if (codeInputField.selectionAnchorPosition < protectedPrefix.Length || codeInputField.selectionFocusPosition < protectedPrefix.Length)
             {
                 codeInputField.selectionAnchorPosition = codeInputField.text.Length;
                 codeInputField.selectionFocusPosition = codeInputField.text.Length;
@@ -185,14 +192,11 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    char ValidateCharInput(string text, int charIndex, char addedChar)
-    {
-        if (charIndex < protectedPrefix.Length) return '\0';
-        return addedChar;
-    }
-
+    char ValidateCharInput(string text, int charIndex, char addedChar) { if (charIndex < protectedPrefix.Length) return '\0'; return addedChar; }
+    
     void ValidateInputPreservation(string currentText)
     {
+        // ป้องกันบักการเว้นวรรคและ Tag สี
         if (currentText.Length < protectedPrefix.Length || !currentText.StartsWith(protectedPrefix))
         {
             codeInputField.SetTextWithoutNotify(lastValidText);
@@ -207,8 +211,6 @@ public class GameManager : MonoBehaviour
         if (startPanel) startPanel.SetActive(false); 
         startTime = Time.time; 
         if (clawimage) clawimage.SetActive(true);
-
-        // --- (ของใหม่) เรียกใช้อนิเมชันตุ๊กตาร่วงลงมา ---
         StartCoroutine(AnimateDollsFalling());
     }
     
@@ -228,7 +230,7 @@ public class GameManager : MonoBehaviour
     { 
         foreach (GameObject d in spawnedDolls) Destroy(d);
         spawnedDolls.Clear();
-        dollTargetPositions.Clear(); // เคลียร์จุดเดิม
+        dollTargetPositions.Clear(); 
 
         List<Transform> availableTop = new List<Transform>(topRowSpots);
         List<Transform> availableBottom = new List<Transform>(bottomRowSpots);
@@ -251,81 +253,78 @@ public class GameManager : MonoBehaviour
         }
     }
     
-    void CreateDollUI(int index, Transform spot) 
+void CreateDollUI(int index, Transform spot) 
     { 
         GameObject newDoll = Instantiate(dollPrefabUI, gameplayArea);
-        
-        // --- (ของใหม่) จำตำแหน่งปลายทาง แล้วจับเลื่อนขึ้นไปข้างบนเพื่อรอร่วง ---
         Vector3 targetPos = spot.position;
         dollTargetPositions.Add(newDoll, targetPos);
-        newDoll.transform.position = targetPos + new Vector3(0, spawnDropOffset, 0); // เลื่อนขึ้นไป 800 pixel
+        newDoll.transform.position = targetPos + new Vector3(0, spawnDropOffset, 0); 
 
         Image img = newDoll.GetComponent<Image>();
-        if (img) { img.sprite = allDollSprites[index]; img.preserveAspect = true; }
+        if (img) 
+        { 
+            img.sprite = allDollSprites[index]; 
+            
+            // คืนค่าขนาดรูปต้นฉบับก่อนคำนวณ
+            img.SetNativeSize(); 
+            
+            RectTransform rect = img.GetComponent<RectTransform>();
+            
+            // --- ตั้งค่าขอบเขตสูงสุดที่ต้องการ ---
+            float maxWidth = 190f;  // ความกว้างสูงสุดที่ยอมให้ขยายได้
+            float maxHeight = 210f; // ความสูงสูงสุดที่ยอมให้ขยายได้ (ตั้งให้มากกว่ากว้างนิดนึง แครอทจะได้ดูไม่หดเกินไป)
+            
+            // คำนวณอัตราส่วนว่าต้องย่อ/ขยายเท่าไหร่ถึงจะพอดี
+            float widthRatio = maxWidth / rect.sizeDelta.x;
+            float heightRatio = maxHeight / rect.sizeDelta.y;
+            
+            // เลือกใช้สัดส่วนที่ "น้อยกว่า" เพื่อรับประกันว่ารูปจะไม่ทะลุกรอบทั้งแกน X และ Y
+            float finalRatio = Mathf.Min(widthRatio, heightRatio);
+            
+            // บังคับใช้ขนาดใหม่
+            rect.sizeDelta = new Vector2(rect.sizeDelta.x * finalRatio, rect.sizeDelta.y * finalRatio);
+        }
+
         Doll d = newDoll.GetComponent<Doll>();
         if (d) d.dollName = allDollNames[index];
         newDoll.name = allDollNames[index];
         spawnedDolls.Add(newDoll);
-    }
-
-    // ==================================================
-    // (ของใหม่) อนิเมชันสั่งให้ตุ๊กตาทั้งหมดร่วงลงมาพร้อมกัน
-    // ==================================================
-// ==================================================
-    // อนิเมชันสั่งให้ตุ๊กตาร่วงลงมาแบบกระจายๆ (ไม่พร้อมกัน)
-    // ==================================================
-    IEnumerator AnimateDollsFalling()
+    }    IEnumerator AnimateDollsFalling()
     {
-        // เล่นเสียงหล่นตอนเริ่มเทตุ๊กตา
         if (uiAudioSource && dollDropSound) uiAudioSource.PlayOneShot(dollDropSound);
-
-        // วนลูปสั่งให้ตุ๊กตาแต่ละตัวแยกกันร่วง
         foreach (var kvp in dollTargetPositions)
         {
             if (kvp.Key != null)
             {
-                // สุ่มเวลาหน่วง (Delay) ตั้งแต่ 0 ถึง 0.6 วินาที (ปรับให้ร่วงช้า/เร็วตามใจชอบได้)
                 float randomDelay = Random.Range(0f, 0.6f); 
-                
-                // สั่งให้ตุ๊กตาตัวนั้นแยกไปรันอนิเมชันของตัวเอง
                 StartCoroutine(DropSingleDoll(kvp.Key, kvp.Value, randomDelay));
             }
         }
-        
         yield return null;
     }
 
-    // ฟังก์ชันใหม่: จัดการตุ๊กตาแต่ละตัวให้ร่วงตามเวลาที่สุ่มได้
     IEnumerator DropSingleDoll(GameObject doll, Vector3 targetPos, float delay)
     {
-        // 1. รอเวลา Delay ที่สุ่มมา
         yield return new WaitForSeconds(delay);
-
-        float duration = 0.8f; // ความเร็วในการตกลงมาของแต่ละตัว (วินาที)
+        float duration = 0.8f; 
         float t = 0;
         Vector3 startPos = targetPos + new Vector3(0, spawnDropOffset, 0);
 
-        // 2. เริ่มร่วงลงมาพร้อมเอฟเฟกต์เด้งดึ๋ง
         while (t < 1f)
         {
-            // ป้องกันบัคเผื่อตุ๊กตาโดนลบทิ้งไปก่อน
             if (doll == null) yield break; 
-
             t += Time.deltaTime / duration;
-            float ease = BounceEaseOut(t); // ดึงสมการเด้งพื้น
-
+            float ease = BounceEaseOut(t); 
             doll.transform.position = Vector3.LerpUnclamped(startPos, targetPos, ease);
             yield return null;
         }
-
-        // 3. จับให้ตรงล็อกเป๊ะๆ ตอนจบ
         if (doll != null) doll.transform.position = targetPos;
+        if (uiAudioSource && dollDropSound) uiAudioSource.PlayOneShot(dollDropSound, 0.5f);
     }
 
-    // สมการคณิตศาสตร์ ทำให้ดูเด้งสมจริงตอนกระทบพื้น (อันเดิม)
     float BounceEaseOut(float t)
     {
-        if (t < 1f / 2.75f) { return 7.5625f * t * t; }
+        if (t < 1f / 2.75f) return 7.5625f * t * t;
         else if (t < 2f / 2.75f) { t -= 1.5f / 2.75f; return 7.5625f * t * t + 0.75f; }
         else if (t < 2.5f / 2.75f) { t -= 2.25f / 2.75f; return 7.5625f * t * t + 0.9375f; }
         else { t -= 2.625f / 2.75f; return 7.5625f * t * t + 0.984375f; }
@@ -342,11 +341,11 @@ public class GameManager : MonoBehaviour
     {
         isExecuting = true;
         
+        // กรองเอาบรรทัดสุดท้ายแบบไม่เอาช่องว่างมาวิเคราะห์
         string[] lines = codeInputField.text.Split(new char[] { '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
         if (lines.Length == 0) { isExecuting = false; yield break; }
 
-        string lastLine = lines[lines.Length - 1]; 
-        string rawLine = lastLine.Trim();
+        string rawLine = lines[lines.Length - 1].Trim();
         int currentLineNum = lines.Length;
 
         if (string.IsNullOrEmpty(rawLine) && lines.Length > 1) 
@@ -355,15 +354,18 @@ public class GameManager : MonoBehaviour
             currentLineNum--;
         }
 
-        if (!string.IsNullOrEmpty(rawLine))
+        // ลบ Tags สีเก่า (ถ้าผู้เล่นแอบพิมพ์เข้ามา) เพื่อเอามาวิเคราะห์
+        string cleanRawLine = rawLine;
+
+        if (!string.IsNullOrEmpty(cleanRawLine))
         {
-            if (!rawLine.EndsWith(";")) 
+            if (!cleanRawLine.EndsWith(";")) 
             {
-                ShowError(8, "MissingSemicolon", rawLine, rawLine + ";", currentLineNum);
-                LockAndPrepareNewLine(); yield break; 
+                ShowError(8, "MissingSemicolon", cleanRawLine, cleanRawLine + ";", currentLineNum);
+                LockAndColorLastLine(cleanRawLine, false); yield break; 
             }
 
-            string commandFull = rawLine.Substring(0, rawLine.Length - 1).Trim(); 
+            string commandFull = cleanRawLine.Substring(0, cleanRawLine.Length - 1).Trim(); 
             string cmdName = "";
             string paramContent = "";
             bool hasOpenParen = commandFull.Contains("(");
@@ -389,8 +391,8 @@ public class GameManager : MonoBehaviour
             if (caseMatch && !exactMatch)
             {
                 string correctCmd = validCommands.First(x => x.Equals(cmdName, System.StringComparison.OrdinalIgnoreCase));
-                ShowError(2, "CaseSensitiveError", rawLine, correctCmd + "(...);", currentLineNum);
-                LockAndPrepareNewLine(); yield break; 
+                ShowError(2, "CaseSensitiveError", cleanRawLine, correctCmd + "(...);", currentLineNum);
+                LockAndColorLastLine(cleanRawLine, false); yield break; 
             }
 
             if (!exactMatch)
@@ -399,15 +401,15 @@ public class GameManager : MonoBehaviour
                   if (cmdName.Contains("Right")) guess = "GoRight";
                   if (cmdName.Contains("Down")) guess = "MoveDown";
                   if (cmdName.Contains("Grip")) guess = "Grip";
-                  ShowError(1, "Misspell", rawLine, guess + "(...);", currentLineNum);
-                  LockAndPrepareNewLine(); yield break; 
+                  ShowError(1, "Misspell", cleanRawLine, guess + "(...);", currentLineNum);
+                  LockAndColorLastLine(cleanRawLine, false); yield break; 
             }
 
             if (!hasOpenParen || !hasCloseParen)
             {
-                if (!hasOpenParen) ShowError(3, "MissingParentheses", rawLine, cmdName + "();", currentLineNum);
-                else ShowError(4, "UnclosedParenthesis", rawLine, cmdName + "();", currentLineNum);
-                LockAndPrepareNewLine(); yield break; 
+                if (!hasOpenParen) ShowError(3, "MissingParentheses", cleanRawLine, cmdName + "();", currentLineNum);
+                else ShowError(4, "UnclosedParenthesis", cleanRawLine, cmdName + "();", currentLineNum);
+                LockAndColorLastLine(cleanRawLine, false); yield break; 
             }
 
             bool needNumber = (cmdName == "GoLeft" || cmdName == "GoRight" || cmdName == "MoveLeft" || cmdName == "MoveRight");
@@ -417,25 +419,27 @@ public class GameManager : MonoBehaviour
             {
                 if (string.IsNullOrEmpty(paramContent))
                 {
-                    ShowError(5, "MissingParameter", rawLine, cmdName + "(1);", currentLineNum);
-                    LockAndPrepareNewLine(); yield break; 
+                    ShowError(5, "MissingParameter", cleanRawLine, cmdName + "(1);", currentLineNum);
+                    LockAndColorLastLine(cleanRawLine, false); yield break; 
                 }
 
                 if (!int.TryParse(paramContent, out int val))
                 {
-                    if (paramContent.Contains(",")) ShowError(6, "ExtraParameter", rawLine, cmdName + "(1);", currentLineNum);
-                    else ShowError(7, "InvalidParameter", rawLine, cmdName + "(1);", currentLineNum);
-                    LockAndPrepareNewLine(); yield break; 
+                    if (paramContent.Contains(",")) ShowError(6, "ExtraParameter", cleanRawLine, cmdName + "(1);", currentLineNum);
+                    else ShowError(7, "InvalidParameter", cleanRawLine, cmdName + "(1);", currentLineNum);
+                    LockAndColorLastLine(cleanRawLine, false); yield break; 
                 }
 
-                if (val < 0 || val > 10)
+                if (val < 0)
                 {
-                    ShowError(7, "InvalidParameter", rawLine, "ใส่เลข 1-10", currentLineNum);
-                    LockAndPrepareNewLine(); yield break; 
+                    ShowError(7, "InvalidParameter", cleanRawLine, "ใส่ค่าติดลบไม่ได้", currentLineNum);
+                    LockAndColorLastLine(cleanRawLine, false); yield break; 
                 }
 
+                commandHistory.Add(new CommandLog { commandText = cleanRawLine, isCorrect = true });
                 if (uiAudioSource && codeCorrectSound) uiAudioSource.PlayOneShot(codeCorrectSound);
 
+                LockAndColorLastLine(cleanRawLine, true); // พิมพ์ถูกเปลี่ยนเป็นสีเขียว
                 if (cmdName.Contains("Left")) yield return claw.MoveHorizontal(-val);
                 else yield return claw.MoveHorizontal(val);
             }
@@ -443,25 +447,52 @@ public class GameManager : MonoBehaviour
             {
                 if (!string.IsNullOrEmpty(paramContent))
                 {
-                    ShowError(6, "ExtraParameter", rawLine, cmdName + "();", currentLineNum);
-                    LockAndPrepareNewLine(); yield break; 
+                    ShowError(6, "ExtraParameter", cleanRawLine, cmdName + "();", currentLineNum);
+                    LockAndColorLastLine(cleanRawLine, false); yield break; 
                 }
 
+                commandHistory.Add(new CommandLog { commandText = cleanRawLine, isCorrect = true });
                 if (uiAudioSource && codeCorrectSound) uiAudioSource.PlayOneShot(codeCorrectSound);
 
+                LockAndColorLastLine(cleanRawLine, true); // พิมพ์ถูกเปลี่ยนเป็นสีเขียว
                 if (cmdName == "MoveDown") yield return claw.MoveDown();
                 else if (cmdName == "Grip") { yield return claw.GripAndUp(); CheckResult(); }
             }
         }
-
-        LockAndPrepareNewLine(); 
+        else
+        {
+            LockAndColorLastLine(cleanRawLine, false); 
+        }
     }
 
-    void LockAndPrepareNewLine()
+    // ==========================================
+    // 2. ฟังก์ชันระบายสีคำสั่งที่เพิ่งพิมพ์เสร็จ (สีเขียว/แดง)
+    // ==========================================
+    void LockAndColorLastLine(string rawLine, bool isCorrect)
     {
-        if (!codeInputField.text.EndsWith("\n")) 
-            codeInputField.SetTextWithoutNotify(codeInputField.text + "\n");
+        // เลือกสี (เขียวสำหรับถูก, แดงสำหรับผิด)
+        string colorHex = isCorrect ? "#4CAF50" : "#F44336"; 
         
+        // ถ้ามีความยาวคำสั่งให้ทำการหาและแทนที่ด้วย Tag สี
+        if (!string.IsNullOrEmpty(rawLine))
+        {
+            int lastIdx = codeInputField.text.LastIndexOf(rawLine);
+            if (lastIdx >= 0)
+            {
+                string coloredStr = $"<color={colorHex}>{rawLine}</color>";
+                string newText = codeInputField.text.Remove(lastIdx, rawLine.Length).Insert(lastIdx, coloredStr);
+                
+                // ขึ้นบรรทัดใหม่เตรียมให้พิมพ์คำสั่งถัดไป
+                if (!newText.EndsWith("\n")) newText += "\n";
+                codeInputField.SetTextWithoutNotify(newText);
+            }
+        }
+        else
+        {
+             if (!codeInputField.text.EndsWith("\n")) codeInputField.SetTextWithoutNotify(codeInputField.text + "\n");
+        }
+        
+        // ล็อคข้อความกลายเป็นอดีต
         protectedPrefix = codeInputField.text;
         lastValidText = protectedPrefix;
         codeInputField.caretPosition = codeInputField.text.Length;
@@ -470,6 +501,8 @@ public class GameManager : MonoBehaviour
 
     void ShowError(int id, string codeType, string userCode, string suggest, int lineNum = 0)
     {
+        commandHistory.Add(new CommandLog { commandText = userCode, isCorrect = false });
+
         if (uiAudioSource && codeErrorSound) uiAudioSource.PlayOneShot(codeErrorSound);
 
         ErrorDetail newErr = new ErrorDetail();
@@ -496,7 +529,7 @@ public class GameManager : MonoBehaviour
             case 4: title = "UnclosedParenthesis (ลืมปิดวงเล็บ)"; desc = "รายละเอียดเล็กน้อย ในภาษาโปรแกรมเป็นสิ่งสำคัญและที่สำคัญอย่าลืม ; (semicolon) ปิดท้ายทุกครั้งด้วยนะ"; break;
             case 5: title = "MissingParameter (ลืมใส่พารามิเตอร์)"; desc = "ในภาษาโปรแกรม พารามิเตอร์คือค่าตัวเลขที่ต้องการรับ กรณีนี้ต้องการให้ตัวคีบขยับ ซึ่งรับค่าโดยใส่จำนวนภายในวงเล็บ ()"; break;
             case 6: title = "ExtraParameter (ใส่พารามิเตอร์เกิน)"; desc = "ในภาษาโปรแกรม พารามิเตอร์คือค่าตัวเลขที่ต้องการรับ จาก Error คุณใส่จำนวนตัวเลขที่ต้องการขยับตัวคีบเกิน"; break;
-            case 7: title = "InvalidParameter (ใส่พารามิเตอร์ผิดรูปแบบ)"; desc = "ในภาษาโปรแกรม พารามิเตอร์คือค่าตัวเลขที่ต้องการรับ จาก Error คุณใส่จำนวนตัวเลขที่ต้องการขยับตัวคีบเกิน ซึ่งในกรณีนี้ จะใส่ค่ามากสุดได้ไม่เกิน 10"; break;
+            case 7: title = "InvalidParameter (ใส่พารามิเตอร์ผิดรูปแบบ)"; desc = "ในภาษาโปรแกรม พารามิเตอร์คือค่าตัวเลขที่ต้องการรับ ห้ามใส่ค่าติดลบ"; break;
             case 8: title = "MissingSemicolon (ลืม ;)"; desc = "ในภาษาโปรแกรม ต้องมีการปิดท้ายในคำสั่ง โดยใช้เครื่องหมาย ; (semicolon)"; break;
         }
 
@@ -524,6 +557,7 @@ public class GameManager : MonoBehaviour
         for (int i = 0; i < allDollNames.Length; i++) if (allDollNames[i] == caught) dataIndex = i;
 
         bool isWin = (caught == currentMission);
+        bool isEmptyClaw = string.IsNullOrEmpty(caught); 
         
         if (DataManager.Instance != null)
         {
@@ -541,13 +575,19 @@ public class GameManager : MonoBehaviour
             }
             else ShowWinPanel(dataIndex); 
         }
-        else ShowLosePanel(dataIndex);
+        else if (isEmptyClaw)
+        {
+            ShowEmptyClawPanel();
+        }
+        else 
+        {
+            ShowLosePanel(dataIndex);
+        }
     }
 
     void ShowWinPanel(int dataIndex)
     {
         if (uiAudioSource && winSound) uiAudioSource.PlayOneShot(winSound);
-
         if (winPanel)
         {
             winPanel.SetActive(true);
@@ -561,7 +601,6 @@ public class GameManager : MonoBehaviour
     void ShowLosePanel(int dataIndex)
     {
         if (uiAudioSource && loseSound) uiAudioSource.PlayOneShot(loseSound);
-
         if (losePanel)
         {
             losePanel.SetActive(true);
@@ -573,17 +612,66 @@ public class GameManager : MonoBehaviour
         if (clawimage) clawimage.SetActive(false);
     }
 
+    void ShowEmptyClawPanel()
+    {
+        if (uiAudioSource && loseSound) uiAudioSource.PlayOneShot(loseSound); 
+        if (emptyClawPanel) emptyClawPanel.SetActive(true);
+        if (clawimage) clawimage.SetActive(false);
+    }
+
+  public void ShowCodeResultPanel()
+    {
+        PlayButtonSound();
+
+        if (winPanel) winPanel.SetActive(false);
+        if (losePanel) losePanel.SetActive(false);
+        if (emptyClawPanel) emptyClawPanel.SetActive(false);
+
+        if (totalCommandText) totalCommandText.text = commandHistory.Count.ToString();
+
+        string strAll = "";
+        string strCorrect = "";
+        string strIncorrect = "";
+
+        foreach (var log in commandHistory)
+        {
+            if (log.isCorrect)
+            {
+                strAll += $"{log.commandText}\t\t<color=#4CAF50>ใช้ถูก</color>\n";
+                strCorrect += $"{log.commandText}\n";
+            }
+            else
+            {
+                strAll += $"{log.commandText}\t\t<color=#F44336>ใช้ผิด</color>\n";
+                strIncorrect += $"{log.commandText}\n";
+            }
+        }
+
+        if (allCommandsText) allCommandsText.text = strAll;
+        if (correctCommandsText) correctCommandsText.text = strCorrect;
+        if (incorrectCommandsText) incorrectCommandsText.text = strIncorrect;
+
+        if (codeResultPanel) 
+        {
+            // --- เพิ่มคำสั่งนี้เข้าไป 1 บรรทัดครับ ---
+            codeResultPanel.transform.SetAsLastSibling(); 
+            // ------------------------------------
+            
+            codeResultPanel.SetActive(true);
+        }
+    }
+
     public void OnClickReplay()
     {
         PlayButtonSound(); 
         startTime = Time.time;
         commandCounter = 0;
         sessionErrors.Clear();
+        commandHistory.Clear(); 
 
         RandomizeMission();
-        if (winPanel) winPanel.SetActive(false);
-        if (losePanel) losePanel.SetActive(false);
-        if (errorPanel) errorPanel.SetActive(false);
+        if (codeResultPanel) codeResultPanel.SetActive(false);
+        
         if (codeInputField) 
         {
             codeInputField.SetTextWithoutNotify("");
