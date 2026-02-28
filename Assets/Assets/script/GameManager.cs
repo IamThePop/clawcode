@@ -72,6 +72,11 @@ public class GameManager : MonoBehaviour
     public GameObject emptyInputPanel;
     public Button closeEmptyInputButton;
 
+    // ✨ [เพิ่มใหม่] หน้าต่างแจ้งเตือนเฉพาะกิจ: เลื่อนลงแล้วห้ามขยับซ้ายขวา
+    [Header("MovedDown Error Popup UI")]
+    public GameObject movedDownErrorPanel;
+    public Button closeMovedDownErrorButton;
+
     [Header("Audio Settings (เสียงระบบ)")]
     public AudioSource uiAudioSource;       
     public AudioClip buttonClickSound;      
@@ -101,7 +106,9 @@ public class GameManager : MonoBehaviour
     private int commandCounter = 0;         
     private List<ErrorDetail> sessionErrors = new List<ErrorDetail>();
 
+    // ตัวแปรเช็คสถานะการทำงานของที่คีบ
     private bool hasGripped = false;
+    private bool hasMovedDown = false; 
 
     private struct CommandLog
     {
@@ -124,6 +131,10 @@ public class GameManager : MonoBehaviour
         commandHistory.Clear(); 
         
         hasGripped = false; // รีเซ็ตสถานะให้ยังไม่ได้คีบ
+        hasMovedDown = false; // รีเซ็ตสถานะให้ยังไม่ได้เลื่อนลง
+
+        // เปิดให้พิมพ์ช่อง InputField ได้ปกติเมื่อเริ่มเกม
+        if (codeInputField) codeInputField.interactable = true; 
 
         // ปิดหน้าต่าง Popups ต่างๆ เพื่อความเรียบร้อยก่อนเริ่มเกม
         if (winPanel) winPanel.SetActive(false);
@@ -133,14 +144,16 @@ public class GameManager : MonoBehaviour
         if (errorPanel) errorPanel.SetActive(false);
         if (startPanel) startPanel.SetActive(false); 
         if (emptyInputPanel) emptyInputPanel.SetActive(false); 
+        if (movedDownErrorPanel) movedDownErrorPanel.SetActive(false); 
         if (clawimage) clawimage.SetActive(false);
 
         // สุ่มหาว่ารอบนี้ต้องคีบตัวอะไร
         RandomizeMission(); 
 
-        // ผูกปุ่มกดเข้ากับฟังก์ชัน
+        // ผูกปุ่มกดปิดหน้าต่างเข้ากับฟังก์ชัน
         if (closeErrorButton) closeErrorButton.onClick.AddListener(CloseErrorPanel);
         if (closeEmptyInputButton) closeEmptyInputButton.onClick.AddListener(CloseEmptyInputPanel);
+        if (closeMovedDownErrorButton) closeMovedDownErrorButton.onClick.AddListener(CloseMovedDownErrorPanel); 
 
         // เปิดใช้งานช่องพิมพ์และผูกระบบป้องกันการโกงลบข้อความ
         if(codeInputField) 
@@ -178,12 +191,21 @@ public class GameManager : MonoBehaviour
             if(tutorialPage1) tutorialPage1.SetActive(true);
             if(tutorialPage2) tutorialPage2.SetActive(false);
             if (clawimage) clawimage.SetActive(false);
+            
+            // ล็อคไม่ให้พิมพ์ตอนหน้าสอนเล่นเด้งอยู่
+            if (codeInputField) codeInputField.interactable = false; 
         }
         else EndTutorial();
     }
     void GoToPage1() { PlayButtonSound(); if(tutorialPage1) tutorialPage1.SetActive(true); if(tutorialPage2) tutorialPage2.SetActive(false); }
     void GoToPage2() { PlayButtonSound(); if(tutorialPage1) tutorialPage1.SetActive(false); if(tutorialPage2) tutorialPage2.SetActive(true); }
-    void EndTutorial() { PlayButtonSound(); if (tutorialPanel) tutorialPanel.SetActive(false); if (startPanel) startPanel.SetActive(true); }
+    
+    void EndTutorial() 
+    { 
+        PlayButtonSound(); 
+        if (tutorialPanel) tutorialPanel.SetActive(false); 
+        if (startPanel) startPanel.SetActive(true); 
+    }
 
     // ---------------------------------------------------------
     // ฟังก์ชัน Update: ทำงานทุกๆ เฟรม ใช้ดักจับการกดคีย์บอร์ดของผู้เล่น
@@ -197,11 +219,12 @@ public class GameManager : MonoBehaviour
             SceneManager.LoadScene(homeSceneName);
         }
 
-        // 2. เช็คว่าผู้เล่นกดปุ่ม Enter เพื่อรันคำสั่งหรือไม่
+        // 2. เช็คว่าผู้เล่นกดปุ่ม Enter เพื่อรันคำสั่งหรือไม่ 
+        // (โดยต้องเช็คว่าไม่มี Popup อื่นๆ เด้งขวางอยู่ ถึงจะยอมให้รันโค้ด)
         if ((Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) && !isExecuting)
         {
             bool isTutorialActive = tutorialPanel != null && tutorialPanel.activeSelf;
-            if (codeInputField.isFocused && !errorPanel.activeSelf && (emptyInputPanel == null || !emptyInputPanel.activeSelf) && !isTutorialActive) 
+            if (codeInputField.isFocused && !errorPanel.activeSelf && (emptyInputPanel == null || !emptyInputPanel.activeSelf) && (movedDownErrorPanel == null || !movedDownErrorPanel.activeSelf) && !isTutorialActive) 
                 OnRunCode();
         }
         
@@ -240,8 +263,13 @@ public class GameManager : MonoBehaviour
     { 
         PlayButtonSound(); 
         if (startPanel) startPanel.SetActive(false); 
+        
+        // ปลดล็อคให้พิมพ์ได้ตอนเกมเริ่ม
+        if (codeInputField) { codeInputField.interactable = true; codeInputField.ActivateInputField(); }
+
         startTime = Time.time; 
         hasGripped = false; 
+        hasMovedDown = false; 
         if (clawimage) clawimage.SetActive(true);
         StartCoroutine(AnimateDollsFalling());
     }
@@ -392,13 +420,15 @@ public class GameManager : MonoBehaviour
 
         string cleanRawLine = rawLine;
 
-        // เช็คว่าเคาะเอนเทอร์เปล่าๆ ไม่ยอมพิมพ์โค้ด ให้โชว์หน้าต่างแจ้งเตือน
+        // เช็คว่าเคาะเอนเทอร์เปล่าๆ ไม่ยอมพิมพ์โค้ด ให้โชว์หน้าต่างแจ้งเตือนและล็อคการพิมพ์
         if (string.IsNullOrEmpty(cleanRawLine))
         {
             if (uiAudioSource && codeErrorSound) uiAudioSource.PlayOneShot(codeErrorSound);
             if (emptyInputPanel) emptyInputPanel.SetActive(true); 
             if (clawimage) clawimage.SetActive(false); 
             
+            if (codeInputField) codeInputField.interactable = false;
+
             LockAndColorLastLine("", false); 
             yield break;
         }
@@ -475,6 +505,27 @@ public class GameManager : MonoBehaviour
             bool needNumber = (cmdName == "GoLeft" || cmdName == "GoRight" || cmdName == "MoveLeft" || cmdName == "MoveRight");
             bool noNumber = (cmdName == "MoveDown" || cmdName == "Grip");
 
+            // เช็คว่าถ้าสั่ง MoveDown ไปแล้ว ห้ามใช้คำสั่งขยับซ้ายขวา (โชว์ Popup แบบแยก)
+            if (needNumber && hasMovedDown)
+            {
+                commandHistory.Add(new CommandLog { commandText = cleanRawLine, isCorrect = false });
+                if (uiAudioSource && codeErrorSound) uiAudioSource.PlayOneShot(codeErrorSound);
+
+                ErrorDetail newErr = new ErrorDetail();
+                newErr.line_number = currentLineNum;
+                newErr.command_text = cleanRawLine;
+                newErr.error_type = "AlreadyMovedDown"; 
+                sessionErrors.Add(newErr);
+
+                if (movedDownErrorPanel) movedDownErrorPanel.SetActive(true);
+                if (clawimage) clawimage.SetActive(false); 
+                
+                if (codeInputField) codeInputField.interactable = false; // ล็อคการพิมพ์
+
+                LockAndColorLastLine(cleanRawLine, false);
+                yield break;
+            }
+
             // กรณีคำสั่งที่ต้องระบุระยะทางในวงเล็บ (ขยับซ้าย/ขวา)
             if (needNumber)
             {
@@ -497,7 +548,7 @@ public class GameManager : MonoBehaviour
                     LockAndColorLastLine(cleanRawLine, false); yield break; 
                 }
 
-                // พิมพ์ถูก สั่งการที่คีบให้ขยับ
+                // พิมพ์ถูก สั่งการที่คีบให้ขยับแนวนอน
                 commandHistory.Add(new CommandLog { commandText = cleanRawLine, isCorrect = true });
                 if (uiAudioSource && codeCorrectSound) uiAudioSource.PlayOneShot(codeCorrectSound);
 
@@ -514,15 +565,20 @@ public class GameManager : MonoBehaviour
                     LockAndColorLastLine(cleanRawLine, false); yield break; 
                 }
 
-                // พิมพ์ถูก สั่งการที่คีบให้ขยับ
+                // พิมพ์ถูก สั่งการที่คีบให้ขยับลงล่าง หรือคีบ
                 commandHistory.Add(new CommandLog { commandText = cleanRawLine, isCorrect = true });
                 if (uiAudioSource && codeCorrectSound) uiAudioSource.PlayOneShot(codeCorrectSound);
 
                 LockAndColorLastLine(cleanRawLine, true); 
-                if (cmdName == "MoveDown") yield return claw.MoveDown();
+                
+                if (cmdName == "MoveDown") 
+                {
+                    hasMovedDown = true; // ล็อคทันทีที่สั่ง MoveDown สำเร็จ ไม่ให้เลื่อนซ้ายขวาได้อีก
+                    yield return claw.MoveDown();
+                }
                 else if (cmdName == "Grip") 
                 { 
-                    hasGripped = true; // ล็อคทันทีที่สั่ง Grip สำเร็จ ป้องกันการขยับต่อ
+                    hasGripped = true; // ล็อคทันทีที่สั่ง Grip สำเร็จ ป้องกันการขยับซ้ำ
                     yield return claw.GripAndUp(); 
                     CheckResult(); // ตรวจผลลัพธ์ว่าคีบได้หรือไม่ได้
                 }
@@ -566,12 +622,13 @@ public class GameManager : MonoBehaviour
     // ระบบแสดง Popups แจ้งเตือนต่างๆ และตรวจสอบผลแพ้ชนะ
     // ---------------------------------------------------------
 
-    // ฟังก์ชันสำหรับปิดหน้าต่าง "ไม่ได้พิมพ์โค้ด" และกลับไปโฟกัสที่ช่องพิมพ์
+    // ฟังก์ชันสำหรับปิดหน้าต่าง "ไม่ได้พิมพ์โค้ด" แล้วปลดล็อคให้พิมพ์ต่อ
     void CloseEmptyInputPanel() 
     { 
         PlayButtonSound(); 
         if (emptyInputPanel) emptyInputPanel.SetActive(false);
         if (codeInputField) {
+            codeInputField.interactable = true; 
             codeInputField.ActivateInputField(); 
             codeInputField.caretPosition = codeInputField.text.Length;
             codeInputField.selectionAnchorPosition = codeInputField.text.Length;
@@ -580,7 +637,22 @@ public class GameManager : MonoBehaviour
         if (clawimage) clawimage.SetActive(true); 
     }
 
-    // ฟังก์ชันเรียกหน้าต่าง Error Popup ขึ้นมาโชว์ พร้อมแสดงคำอธิบายสาเหตุ
+    // ฟังก์ชันสำหรับปิดหน้าต่างเฉพาะกิจ "เลื่อนลงแล้วห้ามขยับซ้ายขวา" แล้วปลดล็อคให้พิมพ์ต่อ
+    void CloseMovedDownErrorPanel() 
+    { 
+        PlayButtonSound(); 
+        if (movedDownErrorPanel) movedDownErrorPanel.SetActive(false);
+        if (codeInputField) {
+            codeInputField.interactable = true; 
+            codeInputField.ActivateInputField(); 
+            codeInputField.caretPosition = codeInputField.text.Length;
+            codeInputField.selectionAnchorPosition = codeInputField.text.Length;
+            codeInputField.selectionFocusPosition = codeInputField.text.Length;
+        }
+        if (clawimage) clawimage.SetActive(true); 
+    }
+
+    // ฟังก์ชันเรียกหน้าต่าง Error Popup ขึ้นมาโชว์ พร้อมแสดงคำอธิบายสาเหตุ และล็อคการพิมพ์
     void ShowError(int id, string codeType, string userCode, string suggest, int lineNum = 0)
     {
         commandHistory.Add(new CommandLog { commandText = userCode, isCorrect = false });
@@ -597,6 +669,8 @@ public class GameManager : MonoBehaviour
 
         errorPanel.SetActive(true);
         if (clawimage) clawimage.SetActive(false); 
+        
+        if (codeInputField) codeInputField.interactable = false;
         
         if(errorUserCodeText) errorUserCodeText.text = userCode;
         if(errorSuggestionText) errorSuggestionText.text = suggest;
@@ -626,6 +700,7 @@ public class GameManager : MonoBehaviour
         PlayButtonSound(); 
         if (errorPanel) errorPanel.SetActive(false);
         if (codeInputField) {
+            codeInputField.interactable = true; 
             codeInputField.ActivateInputField(); 
             codeInputField.caretPosition = codeInputField.text.Length;
             codeInputField.selectionAnchorPosition = codeInputField.text.Length;
@@ -680,6 +755,9 @@ public class GameManager : MonoBehaviour
         if (winPanel)
         {
             winPanel.SetActive(true);
+            // ล็อคไม่ให้แอบพิมพ์โค้ดต่อตอนจบเกม
+            if (codeInputField) codeInputField.interactable = false; 
+
             if (dataIndex != -1 && winDollImage) { winDollImage.sprite = allDollSprites[dataIndex]; winDollImage.preserveAspect = true; }
             if (winDollNameText) winDollNameText.text = currentMission;
             if (winDollDetailText && dataIndex < allDollDescriptions.Length) winDollDetailText.text = allDollDescriptions[dataIndex];
@@ -694,6 +772,9 @@ public class GameManager : MonoBehaviour
         if (losePanel)
         {
             losePanel.SetActive(true);
+            // ล็อคไม่ให้แอบพิมพ์โค้ดต่อตอนจบเกม
+            if (codeInputField) codeInputField.interactable = false; 
+
             if (loseDollImage) {
                 if (dataIndex != -1) { loseDollImage.sprite = allDollSprites[dataIndex]; loseDollImage.preserveAspect = true; }
                 else loseDollImage.sprite = defaultLoseSprite;
@@ -707,6 +788,9 @@ public class GameManager : MonoBehaviour
     {
         if (uiAudioSource && loseSound) uiAudioSource.PlayOneShot(loseSound); 
         if (emptyClawPanel) emptyClawPanel.SetActive(true);
+        // ล็อคไม่ให้แอบพิมพ์โค้ดต่อตอนจบเกม
+        if (codeInputField) codeInputField.interactable = false; 
+        
         if (clawimage) clawimage.SetActive(false);
     }
 
@@ -721,6 +805,9 @@ public class GameManager : MonoBehaviour
         if (winPanel) winPanel.SetActive(false);
         if (losePanel) losePanel.SetActive(false);
         if (emptyClawPanel) emptyClawPanel.SetActive(false);
+
+        // กันเหนียว ล็อคไม่ให้พิมพ์ต่อเด็ดขาดในหน้าสรุปผล
+        if (codeInputField) codeInputField.interactable = false; 
 
         if (totalCommandText) totalCommandText.text = commandHistory.Count.ToString();
 
@@ -765,6 +852,7 @@ public class GameManager : MonoBehaviour
         commandHistory.Clear(); 
         
         hasGripped = false; // ปลดล็อคการคีบ
+        hasMovedDown = false; // ปลดล็อคการเลื่อนลง
 
         RandomizeMission(); // สุ่มเป้าหมายใหม่
         if (codeResultPanel) codeResultPanel.SetActive(false);
@@ -775,6 +863,7 @@ public class GameManager : MonoBehaviour
             codeInputField.SetTextWithoutNotify("");
             protectedPrefix = ""; 
             lastValidText = "";
+            codeInputField.interactable = true; // เปิดให้กลับมาพิมพ์ได้เมื่อเริ่มเกมใหม่
         }
         if (startPanel) startPanel.SetActive(true);
     }
