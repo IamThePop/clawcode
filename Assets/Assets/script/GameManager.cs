@@ -22,6 +22,10 @@ public class GameManager : MonoBehaviour
     public Image missionImageUI;
     public TextMeshProUGUI missionTextUI;
     
+    // ✨ [อัปเดตใหม่] ตัวหนังสือสำหรับแสดงเวลาตอนเล่นเกม (บนหน้าต่าง Mission)
+    [Header("Timer UI")]
+    public TextMeshProUGUI timerTextUI; 
+
     [Header("Doll Database")]
     public string[] allDollNames;        
     public Sprite[] allDollSprites;      
@@ -51,6 +55,12 @@ public class GameManager : MonoBehaviour
     public TextMeshProUGUI correctCommandsText;   
     public TextMeshProUGUI incorrectCommandsText; 
 
+    // ✨ [อัปเดตใหม่] ตัวแปรสำหรับแสดงข้อมูลเพิ่มเติมในหน้า Result Popup
+    [Header("Result Stats UI")]
+    public TextMeshProUGUI resultTimeText;       // แสดงเวลาที่ใช้ไปทั้งหมด
+    public TextMeshProUGUI correctPercentText;   // แสดงตัวเลข % ที่พิมพ์ถูก
+    public TextMeshProUGUI incorrectPercentText; // แสดงตัวเลข % ที่พิมพ์ผิด
+
     [Header("Tutorial UI")]
     public GameObject tutorialPanel;    
     public GameObject tutorialPage1;    
@@ -72,7 +82,6 @@ public class GameManager : MonoBehaviour
     public GameObject emptyInputPanel;
     public Button closeEmptyInputButton;
 
-    // ✨ [เพิ่มใหม่] หน้าต่างแจ้งเตือนเฉพาะกิจ: เลื่อนลงแล้วห้ามขยับซ้ายขวา
     [Header("MovedDown Error Popup UI")]
     public GameObject movedDownErrorPanel;
     public Button closeMovedDownErrorButton;
@@ -102,7 +111,11 @@ public class GameManager : MonoBehaviour
     private string protectedPrefix = ""; 
     private string lastValidText = "";   
 
+    // ✨ [อัปเดตใหม่] ระบบจัดการเวลา
     private float startTime;                
+    private float elapsedGameTime = 0f;     
+    private bool isTimerRunning = false;    
+
     private int commandCounter = 0;         
     private List<ErrorDetail> sessionErrors = new List<ErrorDetail>();
 
@@ -121,22 +134,23 @@ public class GameManager : MonoBehaviour
 
     // ---------------------------------------------------------
     // ฟังก์ชัน Start: ทำงานครั้งแรกสุดเมื่อเปิดฉาก (Scene) นี้ขึ้นมา
-    // ใช้สำหรับเคลียร์ค่าเก่า ปิดหน้าต่าง UI ทั้งหมด และสุ่มตุ๊กตาเตรียมเริ่มเกม
     // ---------------------------------------------------------
     void Start()
     {
         startTime = Time.time;
         commandCounter = 0;
+        elapsedGameTime = 0f;
+        isTimerRunning = false; 
+
         sessionErrors = new List<ErrorDetail>();
         commandHistory.Clear(); 
         
-        hasGripped = false; // รีเซ็ตสถานะให้ยังไม่ได้คีบ
-        hasMovedDown = false; // รีเซ็ตสถานะให้ยังไม่ได้เลื่อนลง
+        hasGripped = false; 
+        hasMovedDown = false; 
 
-        // เปิดให้พิมพ์ช่อง InputField ได้ปกติเมื่อเริ่มเกม
         if (codeInputField) codeInputField.interactable = true; 
+        if (timerTextUI) timerTextUI.text = "00:00"; // รีเซ็ตตัวหนังสือเวลาเริ่มต้น
 
-        // ปิดหน้าต่าง Popups ต่างๆ เพื่อความเรียบร้อยก่อนเริ่มเกม
         if (winPanel) winPanel.SetActive(false);
         if (losePanel) losePanel.SetActive(false);
         if (emptyClawPanel) emptyClawPanel.SetActive(false);
@@ -147,15 +161,12 @@ public class GameManager : MonoBehaviour
         if (movedDownErrorPanel) movedDownErrorPanel.SetActive(false); 
         if (clawimage) clawimage.SetActive(false);
 
-        // สุ่มหาว่ารอบนี้ต้องคีบตัวอะไร
         RandomizeMission(); 
 
-        // ผูกปุ่มกดปิดหน้าต่างเข้ากับฟังก์ชัน
         if (closeErrorButton) closeErrorButton.onClick.AddListener(CloseErrorPanel);
         if (closeEmptyInputButton) closeEmptyInputButton.onClick.AddListener(CloseEmptyInputPanel);
         if (closeMovedDownErrorButton) closeMovedDownErrorButton.onClick.AddListener(CloseMovedDownErrorPanel); 
 
-        // เปิดใช้งานช่องพิมพ์และผูกระบบป้องกันการโกงลบข้อความ
         if(codeInputField) 
         {
             codeInputField.ActivateInputField();
@@ -163,13 +174,9 @@ public class GameManager : MonoBehaviour
             codeInputField.onValidateInput += ValidateCharInput;
         }
 
-        // โชว์หน้าจอสอนเล่น
         SetupTutorial(); 
     }
 
-    // ---------------------------------------------------------
-    // ฟังก์ชัน PlayButtonSound: ใช้เรียกเล่นเสียงเวลากดปุ่มในเกม
-    // ---------------------------------------------------------
     public void PlayButtonSound()
     {
         if (uiAudioSource && buttonClickSound) uiAudioSource.PlayOneShot(buttonClickSound);
@@ -192,7 +199,6 @@ public class GameManager : MonoBehaviour
             if(tutorialPage2) tutorialPage2.SetActive(false);
             if (clawimage) clawimage.SetActive(false);
             
-            // ล็อคไม่ให้พิมพ์ตอนหน้าสอนเล่นเด้งอยู่
             if (codeInputField) codeInputField.interactable = false; 
         }
         else EndTutorial();
@@ -212,15 +218,24 @@ public class GameManager : MonoBehaviour
     // ---------------------------------------------------------
     void Update()
     {
-        // 1. เช็คคีย์ลัด Ctrl + B เพื่อกดกลับหน้า Home
+        // ✨ [อัปเดตใหม่] ระบบจับเวลาแบบ Real-time เดินเฉพาะตอนเกมเล่นอยู่
+        if (isTimerRunning)
+        {
+            elapsedGameTime = Time.time - startTime;
+            if (timerTextUI != null)
+            {
+                int minutes = Mathf.FloorToInt(elapsedGameTime / 60F);
+                int seconds = Mathf.FloorToInt(elapsedGameTime - minutes * 60);
+                timerTextUI.text = string.Format("{0:00}:{1:00}", minutes, seconds); // แสดงผลแบบ นาที:วินาที
+            }
+        }
+
         if ((Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) && 
              Input.GetKeyDown(KeyCode.B))
         {
             SceneManager.LoadScene(homeSceneName);
         }
 
-        // 2. เช็คว่าผู้เล่นกดปุ่ม Enter เพื่อรันคำสั่งหรือไม่ 
-        // (โดยต้องเช็คว่าไม่มี Popup อื่นๆ เด้งขวางอยู่ ถึงจะยอมให้รันโค้ด)
         if ((Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) && !isExecuting)
         {
             bool isTutorialActive = tutorialPanel != null && tutorialPanel.activeSelf;
@@ -228,7 +243,6 @@ public class GameManager : MonoBehaviour
                 OnRunCode();
         }
         
-        // 3. ระบบบังคับไม่ให้ผู้เล่นเอาเมาส์ไปคลิกลบคำสั่งเก่าที่พิมพ์ผ่านไปแล้ว
         if (codeInputField.isFocused)
         {
             if (codeInputField.caretPosition < protectedPrefix.Length) codeInputField.caretPosition = codeInputField.text.Length;
@@ -240,9 +254,6 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // ---------------------------------------------------------
-    // หมวดป้องกันข้อความ: เช็คว่าตัวอักษรที่พิมพ์/ลบ อยู่ในโซนห้ามแก้หรือไม่
-    // ---------------------------------------------------------
     char ValidateCharInput(string text, int charIndex, char addedChar) { if (charIndex < protectedPrefix.Length) return '\0'; return addedChar; }
     
     void ValidateInputPreservation(string currentText)
@@ -258,23 +269,23 @@ public class GameManager : MonoBehaviour
     // ---------------------------------------------------------
     // ระบบเตรียมตัวเริ่มเกม และจัดการตุ๊กตา
     // ---------------------------------------------------------
-    // ทำงานเมื่อกดปุ่ม "Start Game" ให้ตุ๊กตาร่วงลงมาและเริ่มนับเวลา
     public void OnClickStartGame() 
     { 
         PlayButtonSound(); 
         if (startPanel) startPanel.SetActive(false); 
         
-        // ปลดล็อคให้พิมพ์ได้ตอนเกมเริ่ม
         if (codeInputField) { codeInputField.interactable = true; codeInputField.ActivateInputField(); }
 
+        // ✨ [อัปเดตใหม่] เริ่มนับเวลาเมื่อกดเริ่มเกม
         startTime = Time.time; 
+        isTimerRunning = true; 
+
         hasGripped = false; 
         hasMovedDown = false; 
         if (clawimage) clawimage.SetActive(true);
         StartCoroutine(AnimateDollsFalling());
     }
     
-    // สุ่มว่ารอบนี้ผู้เล่นต้องคีบตัวไหนเป็นเป้าหมาย
     public void RandomizeMission() 
     {
         if (allDollNames.Length == 0) return;
@@ -287,7 +298,6 @@ public class GameManager : MonoBehaviour
         SpawnDolls(missionIndex);
     }
     
-    // จัดตำแหน่งเกิดของตุ๊กตา โดยบังคับให้ตัวเป้าหมายเกิดด้านบนเสมอ เพื่อไม่ให้โดนตัวอื่นบัง
     void SpawnDolls(int missionIndex) 
     { 
         foreach (GameObject d in spawnedDolls) Destroy(d);
@@ -315,7 +325,6 @@ public class GameManager : MonoBehaviour
         }
     }
     
-    // สร้าง Object ตุ๊กตาบนหน้าจอ และควบคุมไม่ให้รูปบิดเบี้ยวหรือทะลุกรอบความกว้าง/สูงที่เรากำหนดไว้
     void CreateDollUI(int index, Transform spot) 
     { 
         GameObject newDoll = Instantiate(dollPrefabUI, gameplayArea);
@@ -382,7 +391,6 @@ public class GameManager : MonoBehaviour
         if (uiAudioSource && dollDropSound) uiAudioSource.PlayOneShot(dollDropSound, 0.5f);
     }
 
-    // สมการคำนวณการร่วงให้ดูเด้งดึ๋งเหมือนตกกระทบพื้น
     float BounceEaseOut(float t)
     {
         if (t < 1f / 2.75f) return 7.5625f * t * t;
@@ -401,7 +409,6 @@ public class GameManager : MonoBehaviour
         StartCoroutine(ExecuteLastLineOnly());
     }
 
-    // ฟังก์ชันตรวจสอบโค้ดบรรทัดล่าสุดที่ผู้เล่นเพิ่งกด Enter
     IEnumerator ExecuteLastLineOnly()
     {
         isExecuting = true;
@@ -420,7 +427,6 @@ public class GameManager : MonoBehaviour
 
         string cleanRawLine = rawLine;
 
-        // เช็คว่าเคาะเอนเทอร์เปล่าๆ ไม่ยอมพิมพ์โค้ด ให้โชว์หน้าต่างแจ้งเตือนและล็อคการพิมพ์
         if (string.IsNullOrEmpty(cleanRawLine))
         {
             if (uiAudioSource && codeErrorSound) uiAudioSource.PlayOneShot(codeErrorSound);
@@ -433,7 +439,6 @@ public class GameManager : MonoBehaviour
             yield break;
         }
 
-        // เช็คว่าถ้าสั่ง Grip ไปแล้ว จะไม่ยอมให้พิมพ์ขยับต่อได้อีก
         if (hasGripped)
         {
             ShowError(9, "AlreadyGripped", cleanRawLine, "เริ่มเกมใหม่เพื่อคีบอีกครั้ง", currentLineNum);
@@ -443,14 +448,12 @@ public class GameManager : MonoBehaviour
 
         if (!string.IsNullOrEmpty(cleanRawLine))
         {
-            // ตรวจสอบเซมิโคลอน ปิดท้ายคำสั่ง
             if (!cleanRawLine.EndsWith(";")) 
             {
                 ShowError(8, "MissingSemicolon", cleanRawLine, cleanRawLine + ";", currentLineNum);
                 LockAndColorLastLine(cleanRawLine, false); yield break; 
             }
 
-            // แยกวิเคราะห์ชื่อคำสั่ง กับ ตัวเลขในวงเล็บ (พารามิเตอร์)
             string commandFull = cleanRawLine.Substring(0, cleanRawLine.Length - 1).Trim(); 
             string cmdName = "";
             string paramContent = "";
@@ -469,13 +472,11 @@ public class GameManager : MonoBehaviour
             }
             else cmdName = commandFull; 
 
-            // ตรวจสอบความถูกต้องของคำสั่ง
             string[] validCommands = { "GoLeft", "GoRight", "MoveLeft", "MoveRight", "MoveDown", "Grip" };
 
             bool caseMatch = validCommands.Any(x => x.Equals(cmdName, System.StringComparison.OrdinalIgnoreCase));
             bool exactMatch = validCommands.Contains(cmdName);
 
-            // พิมพ์ตัวพิมพ์เล็ก/ใหญ่ผิด (Case Sensitive)
             if (caseMatch && !exactMatch)
             {
                 string correctCmd = validCommands.First(x => x.Equals(cmdName, System.StringComparison.OrdinalIgnoreCase));
@@ -483,7 +484,6 @@ public class GameManager : MonoBehaviour
                 LockAndColorLastLine(cleanRawLine, false); yield break; 
             }
 
-            // สะกดผิด ไม่ตรงกับคำสั่งไหนเลย
             if (!exactMatch)
             {
                   string guess = "GoLeft";
@@ -494,7 +494,6 @@ public class GameManager : MonoBehaviour
                   LockAndColorLastLine(cleanRawLine, false); yield break; 
             }
 
-            // ลืมใส่วงเล็บ หรือ ลืมปิดวงเล็บ
             if (!hasOpenParen || !hasCloseParen)
             {
                 if (!hasOpenParen) ShowError(3, "MissingParentheses", cleanRawLine, cmdName + "();", currentLineNum);
@@ -505,7 +504,6 @@ public class GameManager : MonoBehaviour
             bool needNumber = (cmdName == "GoLeft" || cmdName == "GoRight" || cmdName == "MoveLeft" || cmdName == "MoveRight");
             bool noNumber = (cmdName == "MoveDown" || cmdName == "Grip");
 
-            // เช็คว่าถ้าสั่ง MoveDown ไปแล้ว ห้ามใช้คำสั่งขยับซ้ายขวา (โชว์ Popup แบบแยก)
             if (needNumber && hasMovedDown)
             {
                 commandHistory.Add(new CommandLog { commandText = cleanRawLine, isCorrect = false });
@@ -520,13 +518,12 @@ public class GameManager : MonoBehaviour
                 if (movedDownErrorPanel) movedDownErrorPanel.SetActive(true);
                 if (clawimage) clawimage.SetActive(false); 
                 
-                if (codeInputField) codeInputField.interactable = false; // ล็อคการพิมพ์
+                if (codeInputField) codeInputField.interactable = false; 
 
                 LockAndColorLastLine(cleanRawLine, false);
                 yield break;
             }
 
-            // กรณีคำสั่งที่ต้องระบุระยะทางในวงเล็บ (ขยับซ้าย/ขวา)
             if (needNumber)
             {
                 if (string.IsNullOrEmpty(paramContent))
@@ -548,7 +545,6 @@ public class GameManager : MonoBehaviour
                     LockAndColorLastLine(cleanRawLine, false); yield break; 
                 }
 
-                // พิมพ์ถูก สั่งการที่คีบให้ขยับแนวนอน
                 commandHistory.Add(new CommandLog { commandText = cleanRawLine, isCorrect = true });
                 if (uiAudioSource && codeCorrectSound) uiAudioSource.PlayOneShot(codeCorrectSound);
 
@@ -556,7 +552,6 @@ public class GameManager : MonoBehaviour
                 if (cmdName.Contains("Left")) yield return claw.MoveHorizontal(-val);
                 else yield return claw.MoveHorizontal(val);
             }
-            // กรณีคำสั่งที่ไม่ต้องระบุตัวเลข (ลงล่าง, คีบ)
             else if (noNumber)
             {
                 if (!string.IsNullOrEmpty(paramContent))
@@ -565,7 +560,6 @@ public class GameManager : MonoBehaviour
                     LockAndColorLastLine(cleanRawLine, false); yield break; 
                 }
 
-                // พิมพ์ถูก สั่งการที่คีบให้ขยับลงล่าง หรือคีบ
                 commandHistory.Add(new CommandLog { commandText = cleanRawLine, isCorrect = true });
                 if (uiAudioSource && codeCorrectSound) uiAudioSource.PlayOneShot(codeCorrectSound);
 
@@ -573,14 +567,14 @@ public class GameManager : MonoBehaviour
                 
                 if (cmdName == "MoveDown") 
                 {
-                    hasMovedDown = true; // ล็อคทันทีที่สั่ง MoveDown สำเร็จ ไม่ให้เลื่อนซ้ายขวาได้อีก
+                    hasMovedDown = true; 
                     yield return claw.MoveDown();
                 }
                 else if (cmdName == "Grip") 
                 { 
-                    hasGripped = true; // ล็อคทันทีที่สั่ง Grip สำเร็จ ป้องกันการขยับซ้ำ
+                    hasGripped = true; 
                     yield return claw.GripAndUp(); 
-                    CheckResult(); // ตรวจผลลัพธ์ว่าคีบได้หรือไม่ได้
+                    CheckResult(); 
                 }
             }
         }
@@ -590,7 +584,6 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // ฟังก์ชันสำหรับใส่สีข้อความ (เขียว=ถูก, แดง=ผิด) และล็อคให้เป็นข้อความในอดีต ห้ามแก้ไข
     void LockAndColorLastLine(string rawLine, bool isCorrect)
     {
         string colorHex = isCorrect ? "#4CAF50" : "#F44336"; 
@@ -621,8 +614,6 @@ public class GameManager : MonoBehaviour
     // ---------------------------------------------------------
     // ระบบแสดง Popups แจ้งเตือนต่างๆ และตรวจสอบผลแพ้ชนะ
     // ---------------------------------------------------------
-
-    // ฟังก์ชันสำหรับปิดหน้าต่าง "ไม่ได้พิมพ์โค้ด" แล้วปลดล็อคให้พิมพ์ต่อ
     void CloseEmptyInputPanel() 
     { 
         PlayButtonSound(); 
@@ -637,7 +628,6 @@ public class GameManager : MonoBehaviour
         if (clawimage) clawimage.SetActive(true); 
     }
 
-    // ฟังก์ชันสำหรับปิดหน้าต่างเฉพาะกิจ "เลื่อนลงแล้วห้ามขยับซ้ายขวา" แล้วปลดล็อคให้พิมพ์ต่อ
     void CloseMovedDownErrorPanel() 
     { 
         PlayButtonSound(); 
@@ -652,7 +642,6 @@ public class GameManager : MonoBehaviour
         if (clawimage) clawimage.SetActive(true); 
     }
 
-    // ฟังก์ชันเรียกหน้าต่าง Error Popup ขึ้นมาโชว์ พร้อมแสดงคำอธิบายสาเหตุ และล็อคการพิมพ์
     void ShowError(int id, string codeType, string userCode, string suggest, int lineNum = 0)
     {
         commandHistory.Add(new CommandLog { commandText = userCode, isCorrect = false });
@@ -694,7 +683,6 @@ public class GameManager : MonoBehaviour
         if(errorDescText) errorDescText.text = desc;
     }
 
-    // ปิดหน้าต่าง Error เพื่อกลับไปแก้ตัวพิมพ์โค้ดใหม่
     void CloseErrorPanel() 
     { 
         PlayButtonSound(); 
@@ -709,9 +697,11 @@ public class GameManager : MonoBehaviour
         if (clawimage) clawimage.SetActive(true); 
     }
 
-    // ประมวลผลหลังจากคีบ (Grip) ว่าคีบโดนตัวไหน และตรงเป้าหมายหรือไม่
     void CheckResult()
     {
+        // ✨ [อัปเดตใหม่] หยุดเวลาทันทีที่ระบบคีบทำงานเสร็จและกำลังประมวลผล
+        isTimerRunning = false; 
+
         string caught = claw.GetCaughtDollName();
         int dataIndex = -1;
         for (int i = 0; i < allDollNames.Length; i++) if (allDollNames[i] == caught) dataIndex = i;
@@ -721,11 +711,10 @@ public class GameManager : MonoBehaviour
         
         if (DataManager.Instance != null)
         {
-            int duration = Mathf.RoundToInt(Time.time - startTime);
+            int duration = Mathf.RoundToInt(elapsedGameTime);
             DataManager.Instance.AddNewUserLog(currentMission, commandCounter, sessionErrors.Count, duration, isWin, sessionErrors);
         }
 
-        // กรณีที่คีบโดนเป้าหมาย (ชนะ)
         if (isWin)
         {
             if (dropBoxTarget != null)
@@ -736,26 +725,22 @@ public class GameManager : MonoBehaviour
             }
             else ShowWinPanel(dataIndex); 
         }
-        // กรณีคีบไม่โดนอะไรเลย (ว่าว)
         else if (isEmptyClaw)
         {
             ShowEmptyClawPanel();
         }
-        // กรณีคีบโดนตัวอื่น (แพ้)
         else 
         {
             ShowLosePanel(dataIndex);
         }
     }
 
-    // ฟังก์ชันโชว์หน้าต่างชนะ คีบถูกตัว
     void ShowWinPanel(int dataIndex)
     {
         if (uiAudioSource && winSound) uiAudioSource.PlayOneShot(winSound);
         if (winPanel)
         {
             winPanel.SetActive(true);
-            // ล็อคไม่ให้แอบพิมพ์โค้ดต่อตอนจบเกม
             if (codeInputField) codeInputField.interactable = false; 
 
             if (dataIndex != -1 && winDollImage) { winDollImage.sprite = allDollSprites[dataIndex]; winDollImage.preserveAspect = true; }
@@ -765,14 +750,12 @@ public class GameManager : MonoBehaviour
         if (clawimage) clawimage.SetActive(false);
     }
 
-    // ฟังก์ชันโชว์หน้าต่างแพ้ คีบผิดตัว
     void ShowLosePanel(int dataIndex)
     {
         if (uiAudioSource && loseSound) uiAudioSource.PlayOneShot(loseSound);
         if (losePanel)
         {
             losePanel.SetActive(true);
-            // ล็อคไม่ให้แอบพิมพ์โค้ดต่อตอนจบเกม
             if (codeInputField) codeInputField.interactable = false; 
 
             if (loseDollImage) {
@@ -783,12 +766,10 @@ public class GameManager : MonoBehaviour
         if (clawimage) clawimage.SetActive(false);
     }
 
-    // ฟังก์ชันโชว์หน้าต่างคีบไม่ได้อะไรเลย
     void ShowEmptyClawPanel()
     {
         if (uiAudioSource && loseSound) uiAudioSource.PlayOneShot(loseSound); 
         if (emptyClawPanel) emptyClawPanel.SetActive(true);
-        // ล็อคไม่ให้แอบพิมพ์โค้ดต่อตอนจบเกม
         if (codeInputField) codeInputField.interactable = false; 
         
         if (clawimage) clawimage.SetActive(false);
@@ -797,7 +778,6 @@ public class GameManager : MonoBehaviour
     // ---------------------------------------------------------
     // หน้าสรุปคำสั่ง (Code Result) และจบเกม
     // ---------------------------------------------------------
-    // รวบรวมคำสั่งที่ผู้เล่นพิมพ์ทั้งหมดมาโชว์ในหน้า Result ตอนจบด่าน
     public void ShowCodeResultPanel()
     {
         PlayButtonSound();
@@ -805,28 +785,63 @@ public class GameManager : MonoBehaviour
         if (winPanel) winPanel.SetActive(false);
         if (losePanel) losePanel.SetActive(false);
         if (emptyClawPanel) emptyClawPanel.SetActive(false);
-
-        // กันเหนียว ล็อคไม่ให้พิมพ์ต่อเด็ดขาดในหน้าสรุปผล
         if (codeInputField) codeInputField.interactable = false; 
 
         if (totalCommandText) totalCommandText.text = commandHistory.Count.ToString();
+
+        // ✨ [อัปเดตใหม่] โชว์เวลาที่ใช้ไปในหน้า Result
+        if (resultTimeText != null)
+        {
+            int minutes = Mathf.FloorToInt(elapsedGameTime / 60F);
+            int seconds = Mathf.FloorToInt(elapsedGameTime - minutes * 60);
+            resultTimeText.text = string.Format("{0:00}:{1:00}", minutes, seconds);
+        }
+
+        // ✨ [อัปเดตใหม่] คำนวณเปอร์เซ็นต์ ถูก/ผิด
+        int totalCmd = commandHistory.Count;
+        int correctCmd = 0;
+        int incorrectCmd = 0;
+
+        foreach (var log in commandHistory)
+        {
+            if (log.isCorrect) correctCmd++;
+            else incorrectCmd++;
+        }
+
+        if (totalCmd > 0)
+        {
+            float correctPct = ((float)correctCmd / totalCmd) * 100f;
+            float incorrectPct = ((float)incorrectCmd / totalCmd) * 100f;
+
+            // ปัดเศษให้เป็นจำนวนเต็ม และเติมเครื่องหมาย %
+            if (correctPercentText) correctPercentText.text = Mathf.RoundToInt(correctPct).ToString() + "%";
+            if (incorrectPercentText) incorrectPercentText.text = Mathf.RoundToInt(incorrectPct).ToString() + "%";
+        }
+        else
+        {
+            // กันเคสที่ผู้เล่นไม่ได้พิมพ์อะไรเลยแล้วระบบจบ
+            if (correctPercentText) correctPercentText.text = "0%";
+            if (incorrectPercentText) incorrectPercentText.text = "0%";
+        }
 
         string strAll = "";
         string strCorrect = "";
         string strIncorrect = "";
 
-        // วนลูปเพื่อแยกคำสั่งที่พิมพ์ถูก ออกจากคำสั่งที่พิมพ์ผิด
+        // ✨ [อัปเดตใหม่] เปลี่ยนสีข้อความแบบคลุมทั้งบรรทัด (คำสั่ง + คำแปล)
         foreach (var log in commandHistory)
         {
             if (log.isCorrect)
             {
-                strAll += $"{log.commandText}\t\t<color=#4CAF50>ใช้ถูก</color>\n";
-                strCorrect += $"{log.commandText}\n";
+                // เอา Tag สีมาครอบตั้งแต่ต้นจนจบประโยค
+                strAll += $"<color=#4CAF50>{log.commandText}\t\tใช้ถูก</color>\n";
+                strCorrect += $"<color=#4CAF50>{log.commandText}</color>\n";
             }
             else
             {
-                strAll += $"{log.commandText}\t\t<color=#F44336>ใช้ผิด</color>\n";
-                strIncorrect += $"{log.commandText}\n";
+                // เอา Tag สีมาครอบตั้งแต่ต้นจนจบประโยค
+                strAll += $"<color=#F44336>{log.commandText}\t\tใช้ผิด</color>\n";
+                strIncorrect += $"<color=#F44336>{log.commandText}</color>\n";
             }
         }
 
@@ -836,34 +851,34 @@ public class GameManager : MonoBehaviour
 
         if (codeResultPanel) 
         {
-            // ดึงหน้าต่าง Result ให้ขึ้นมาโชว์ทับสิ่งอื่นทั้งหมด
             codeResultPanel.transform.SetAsLastSibling(); 
             codeResultPanel.SetActive(true);
         }
     }
 
-    // ปุ่ม Replay เพื่อล้างค่าทั้งหมดแล้วเริ่มสุ่มภารกิจใหม่
     public void OnClickReplay()
     {
         PlayButtonSound(); 
         startTime = Time.time;
+        elapsedGameTime = 0f; // รีเซ็ตเวลาที่นับไว้
         commandCounter = 0;
         sessionErrors.Clear();
         commandHistory.Clear(); 
         
-        hasGripped = false; // ปลดล็อคการคีบ
-        hasMovedDown = false; // ปลดล็อคการเลื่อนลง
+        hasGripped = false; 
+        hasMovedDown = false; 
 
-        RandomizeMission(); // สุ่มเป้าหมายใหม่
+        if (timerTextUI) timerTextUI.text = "00:00"; // รีเซ็ตตัวเลขบนจอ
+
+        RandomizeMission(); 
         if (codeResultPanel) codeResultPanel.SetActive(false);
         
-        // เคลียร์ช่องพิมพ์ให้ว่างเปล่า
         if (codeInputField) 
         {
             codeInputField.SetTextWithoutNotify("");
             protectedPrefix = ""; 
             lastValidText = "";
-            codeInputField.interactable = true; // เปิดให้กลับมาพิมพ์ได้เมื่อเริ่มเกมใหม่
+            codeInputField.interactable = true; 
         }
         if (startPanel) startPanel.SetActive(true);
     }
