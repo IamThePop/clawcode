@@ -4,7 +4,7 @@ using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
 using System.Linq; 
-using UnityEngine.SceneManagement; // เพิ่มอันนี้เพื่อใช้คำสั่งเปลี่ยน Scene
+using UnityEngine.SceneManagement; 
 
 public class GameManager : MonoBehaviour
 {
@@ -68,6 +68,10 @@ public class GameManager : MonoBehaviour
     public TextMeshProUGUI errorDescText;   
     public Button closeErrorButton;         
 
+    [Header("Empty Input Popup UI")]
+    public GameObject emptyInputPanel;
+    public Button closeEmptyInputButton;
+
     [Header("Audio Settings (เสียงระบบ)")]
     public AudioSource uiAudioSource;       
     public AudioClip buttonClickSound;      
@@ -83,7 +87,7 @@ public class GameManager : MonoBehaviour
     public float spawnDropOffset = 800f; 
 
     [Header("Scene Settings")]
-    public string homeSceneName = "Home"; // ชื่อ Scene หน้า Home ของคุณ (แก้ให้ตรงด้วยนะครับ)
+    public string homeSceneName = "Home"; 
 
     public string currentMission;
     private bool isExecuting = false;
@@ -97,6 +101,8 @@ public class GameManager : MonoBehaviour
     private int commandCounter = 0;         
     private List<ErrorDetail> sessionErrors = new List<ErrorDetail>();
 
+    private bool hasGripped = false;
+
     private struct CommandLog
     {
         public string commandText;
@@ -106,26 +112,37 @@ public class GameManager : MonoBehaviour
 
     public GameObject clawimage;
 
+    // ---------------------------------------------------------
+    // ฟังก์ชัน Start: ทำงานครั้งแรกสุดเมื่อเปิดฉาก (Scene) นี้ขึ้นมา
+    // ใช้สำหรับเคลียร์ค่าเก่า ปิดหน้าต่าง UI ทั้งหมด และสุ่มตุ๊กตาเตรียมเริ่มเกม
+    // ---------------------------------------------------------
     void Start()
     {
         startTime = Time.time;
         commandCounter = 0;
         sessionErrors = new List<ErrorDetail>();
         commandHistory.Clear(); 
+        
+        hasGripped = false; // รีเซ็ตสถานะให้ยังไม่ได้คีบ
 
+        // ปิดหน้าต่าง Popups ต่างๆ เพื่อความเรียบร้อยก่อนเริ่มเกม
         if (winPanel) winPanel.SetActive(false);
         if (losePanel) losePanel.SetActive(false);
         if (emptyClawPanel) emptyClawPanel.SetActive(false);
         if (codeResultPanel) codeResultPanel.SetActive(false);
         if (errorPanel) errorPanel.SetActive(false);
         if (startPanel) startPanel.SetActive(false); 
-
+        if (emptyInputPanel) emptyInputPanel.SetActive(false); 
         if (clawimage) clawimage.SetActive(false);
 
-        RandomizeMission();
+        // สุ่มหาว่ารอบนี้ต้องคีบตัวอะไร
+        RandomizeMission(); 
 
+        // ผูกปุ่มกดเข้ากับฟังก์ชัน
         if (closeErrorButton) closeErrorButton.onClick.AddListener(CloseErrorPanel);
+        if (closeEmptyInputButton) closeEmptyInputButton.onClick.AddListener(CloseEmptyInputPanel);
 
+        // เปิดใช้งานช่องพิมพ์และผูกระบบป้องกันการโกงลบข้อความ
         if(codeInputField) 
         {
             codeInputField.ActivateInputField();
@@ -133,14 +150,21 @@ public class GameManager : MonoBehaviour
             codeInputField.onValidateInput += ValidateCharInput;
         }
 
-        SetupTutorial();
+        // โชว์หน้าจอสอนเล่น
+        SetupTutorial(); 
     }
 
+    // ---------------------------------------------------------
+    // ฟังก์ชัน PlayButtonSound: ใช้เรียกเล่นเสียงเวลากดปุ่มในเกม
+    // ---------------------------------------------------------
     public void PlayButtonSound()
     {
         if (uiAudioSource && buttonClickSound) uiAudioSource.PlayOneShot(buttonClickSound);
     }
 
+    // ---------------------------------------------------------
+    // หมวด Tutorial: จัดการหน้าต่างสอนเล่นเมื่อเข้าเกมครั้งแรก
+    // ---------------------------------------------------------
     void SetupTutorial()
     {
         if(tutNextBtn1) tutNextBtn1.onClick.AddListener(GoToPage2);
@@ -157,30 +181,31 @@ public class GameManager : MonoBehaviour
         }
         else EndTutorial();
     }
-
     void GoToPage1() { PlayButtonSound(); if(tutorialPage1) tutorialPage1.SetActive(true); if(tutorialPage2) tutorialPage2.SetActive(false); }
     void GoToPage2() { PlayButtonSound(); if(tutorialPage1) tutorialPage1.SetActive(false); if(tutorialPage2) tutorialPage2.SetActive(true); }
     void EndTutorial() { PlayButtonSound(); if (tutorialPanel) tutorialPanel.SetActive(false); if (startPanel) startPanel.SetActive(true); }
 
+    // ---------------------------------------------------------
+    // ฟังก์ชัน Update: ทำงานทุกๆ เฟรม ใช้ดักจับการกดคีย์บอร์ดของผู้เล่น
+    // ---------------------------------------------------------
     void Update()
     {
-        // ==========================================
-        // 3. ระบบคีย์ลัด กด Command/Ctrl + B กลับหน้า Home
-        // ==========================================
-        if ((Input.GetKey(KeyCode.LeftCommand) || Input.GetKey(KeyCode.RightCommand) || 
-             Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) && 
+        // 1. เช็คคีย์ลัด Ctrl + B เพื่อกดกลับหน้า Home
+        if ((Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) && 
              Input.GetKeyDown(KeyCode.B))
         {
             SceneManager.LoadScene(homeSceneName);
         }
 
+        // 2. เช็คว่าผู้เล่นกดปุ่ม Enter เพื่อรันคำสั่งหรือไม่
         if ((Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) && !isExecuting)
         {
             bool isTutorialActive = tutorialPanel != null && tutorialPanel.activeSelf;
-            if (codeInputField.isFocused && !errorPanel.activeSelf && !isTutorialActive) 
+            if (codeInputField.isFocused && !errorPanel.activeSelf && (emptyInputPanel == null || !emptyInputPanel.activeSelf) && !isTutorialActive) 
                 OnRunCode();
         }
         
+        // 3. ระบบบังคับไม่ให้ผู้เล่นเอาเมาส์ไปคลิกลบคำสั่งเก่าที่พิมพ์ผ่านไปแล้ว
         if (codeInputField.isFocused)
         {
             if (codeInputField.caretPosition < protectedPrefix.Length) codeInputField.caretPosition = codeInputField.text.Length;
@@ -192,11 +217,13 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    // ---------------------------------------------------------
+    // หมวดป้องกันข้อความ: เช็คว่าตัวอักษรที่พิมพ์/ลบ อยู่ในโซนห้ามแก้หรือไม่
+    // ---------------------------------------------------------
     char ValidateCharInput(string text, int charIndex, char addedChar) { if (charIndex < protectedPrefix.Length) return '\0'; return addedChar; }
     
     void ValidateInputPreservation(string currentText)
     {
-        // ป้องกันบักการเว้นวรรคและ Tag สี
         if (currentText.Length < protectedPrefix.Length || !currentText.StartsWith(protectedPrefix))
         {
             codeInputField.SetTextWithoutNotify(lastValidText);
@@ -205,15 +232,21 @@ public class GameManager : MonoBehaviour
         else lastValidText = currentText;
     }
 
+    // ---------------------------------------------------------
+    // ระบบเตรียมตัวเริ่มเกม และจัดการตุ๊กตา
+    // ---------------------------------------------------------
+    // ทำงานเมื่อกดปุ่ม "Start Game" ให้ตุ๊กตาร่วงลงมาและเริ่มนับเวลา
     public void OnClickStartGame() 
     { 
         PlayButtonSound(); 
         if (startPanel) startPanel.SetActive(false); 
         startTime = Time.time; 
+        hasGripped = false; 
         if (clawimage) clawimage.SetActive(true);
         StartCoroutine(AnimateDollsFalling());
     }
     
+    // สุ่มว่ารอบนี้ผู้เล่นต้องคีบตัวไหนเป็นเป้าหมาย
     public void RandomizeMission() 
     {
         if (allDollNames.Length == 0) return;
@@ -226,6 +259,7 @@ public class GameManager : MonoBehaviour
         SpawnDolls(missionIndex);
     }
     
+    // จัดตำแหน่งเกิดของตุ๊กตา โดยบังคับให้ตัวเป้าหมายเกิดด้านบนเสมอ เพื่อไม่ให้โดนตัวอื่นบัง
     void SpawnDolls(int missionIndex) 
     { 
         foreach (GameObject d in spawnedDolls) Destroy(d);
@@ -253,7 +287,8 @@ public class GameManager : MonoBehaviour
         }
     }
     
-void CreateDollUI(int index, Transform spot) 
+    // สร้าง Object ตุ๊กตาบนหน้าจอ และควบคุมไม่ให้รูปบิดเบี้ยวหรือทะลุกรอบความกว้าง/สูงที่เรากำหนดไว้
+    void CreateDollUI(int index, Transform spot) 
     { 
         GameObject newDoll = Instantiate(dollPrefabUI, gameplayArea);
         Vector3 targetPos = spot.position;
@@ -264,24 +299,16 @@ void CreateDollUI(int index, Transform spot)
         if (img) 
         { 
             img.sprite = allDollSprites[index]; 
-            
-            // คืนค่าขนาดรูปต้นฉบับก่อนคำนวณ
             img.SetNativeSize(); 
             
             RectTransform rect = img.GetComponent<RectTransform>();
+            float maxWidth = 190f;  
+            float maxHeight = 210f; 
             
-            // --- ตั้งค่าขอบเขตสูงสุดที่ต้องการ ---
-            float maxWidth = 190f;  // ความกว้างสูงสุดที่ยอมให้ขยายได้
-            float maxHeight = 210f; // ความสูงสูงสุดที่ยอมให้ขยายได้ (ตั้งให้มากกว่ากว้างนิดนึง แครอทจะได้ดูไม่หดเกินไป)
-            
-            // คำนวณอัตราส่วนว่าต้องย่อ/ขยายเท่าไหร่ถึงจะพอดี
             float widthRatio = maxWidth / rect.sizeDelta.x;
             float heightRatio = maxHeight / rect.sizeDelta.y;
-            
-            // เลือกใช้สัดส่วนที่ "น้อยกว่า" เพื่อรับประกันว่ารูปจะไม่ทะลุกรอบทั้งแกน X และ Y
             float finalRatio = Mathf.Min(widthRatio, heightRatio);
             
-            // บังคับใช้ขนาดใหม่
             rect.sizeDelta = new Vector2(rect.sizeDelta.x * finalRatio, rect.sizeDelta.y * finalRatio);
         }
 
@@ -289,7 +316,12 @@ void CreateDollUI(int index, Transform spot)
         if (d) d.dollName = allDollNames[index];
         newDoll.name = allDollNames[index];
         spawnedDolls.Add(newDoll);
-    }    IEnumerator AnimateDollsFalling()
+    }    
+
+    // ---------------------------------------------------------
+    // แอนิเมชันตอนตุ๊กตาร่วงลงมาพร้อมกัน
+    // ---------------------------------------------------------
+    IEnumerator AnimateDollsFalling()
     {
         if (uiAudioSource && dollDropSound) uiAudioSource.PlayOneShot(dollDropSound);
         foreach (var kvp in dollTargetPositions)
@@ -322,6 +354,7 @@ void CreateDollUI(int index, Transform spot)
         if (uiAudioSource && dollDropSound) uiAudioSource.PlayOneShot(dollDropSound, 0.5f);
     }
 
+    // สมการคำนวณการร่วงให้ดูเด้งดึ๋งเหมือนตกกระทบพื้น
     float BounceEaseOut(float t)
     {
         if (t < 1f / 2.75f) return 7.5625f * t * t;
@@ -330,6 +363,9 @@ void CreateDollUI(int index, Transform spot)
         else { t -= 2.625f / 2.75f; return 7.5625f * t * t + 0.984375f; }
     }
 
+    // ---------------------------------------------------------
+    // ระบบตรวจสอบคำสั่งโค้ด (หัวใจหลักของเกม)
+    // ---------------------------------------------------------
     public void OnRunCode()
     {
         if (isExecuting) return;
@@ -337,12 +373,12 @@ void CreateDollUI(int index, Transform spot)
         StartCoroutine(ExecuteLastLineOnly());
     }
 
+    // ฟังก์ชันตรวจสอบโค้ดบรรทัดล่าสุดที่ผู้เล่นเพิ่งกด Enter
     IEnumerator ExecuteLastLineOnly()
     {
         isExecuting = true;
         
-        // กรองเอาบรรทัดสุดท้ายแบบไม่เอาช่องว่างมาวิเคราะห์
-        string[] lines = codeInputField.text.Split(new char[] { '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
+        string[] lines = codeInputField.text.Split(new char[] { '\n' });
         if (lines.Length == 0) { isExecuting = false; yield break; }
 
         string rawLine = lines[lines.Length - 1].Trim();
@@ -354,17 +390,37 @@ void CreateDollUI(int index, Transform spot)
             currentLineNum--;
         }
 
-        // ลบ Tags สีเก่า (ถ้าผู้เล่นแอบพิมพ์เข้ามา) เพื่อเอามาวิเคราะห์
         string cleanRawLine = rawLine;
+
+        // เช็คว่าเคาะเอนเทอร์เปล่าๆ ไม่ยอมพิมพ์โค้ด ให้โชว์หน้าต่างแจ้งเตือน
+        if (string.IsNullOrEmpty(cleanRawLine))
+        {
+            if (uiAudioSource && codeErrorSound) uiAudioSource.PlayOneShot(codeErrorSound);
+            if (emptyInputPanel) emptyInputPanel.SetActive(true); 
+            if (clawimage) clawimage.SetActive(false); 
+            
+            LockAndColorLastLine("", false); 
+            yield break;
+        }
+
+        // เช็คว่าถ้าสั่ง Grip ไปแล้ว จะไม่ยอมให้พิมพ์ขยับต่อได้อีก
+        if (hasGripped)
+        {
+            ShowError(9, "AlreadyGripped", cleanRawLine, "เริ่มเกมใหม่เพื่อคีบอีกครั้ง", currentLineNum);
+            LockAndColorLastLine(cleanRawLine, false);
+            yield break;
+        }
 
         if (!string.IsNullOrEmpty(cleanRawLine))
         {
+            // ตรวจสอบเซมิโคลอน ปิดท้ายคำสั่ง
             if (!cleanRawLine.EndsWith(";")) 
             {
                 ShowError(8, "MissingSemicolon", cleanRawLine, cleanRawLine + ";", currentLineNum);
                 LockAndColorLastLine(cleanRawLine, false); yield break; 
             }
 
+            // แยกวิเคราะห์ชื่อคำสั่ง กับ ตัวเลขในวงเล็บ (พารามิเตอร์)
             string commandFull = cleanRawLine.Substring(0, cleanRawLine.Length - 1).Trim(); 
             string cmdName = "";
             string paramContent = "";
@@ -383,11 +439,13 @@ void CreateDollUI(int index, Transform spot)
             }
             else cmdName = commandFull; 
 
+            // ตรวจสอบความถูกต้องของคำสั่ง
             string[] validCommands = { "GoLeft", "GoRight", "MoveLeft", "MoveRight", "MoveDown", "Grip" };
 
             bool caseMatch = validCommands.Any(x => x.Equals(cmdName, System.StringComparison.OrdinalIgnoreCase));
             bool exactMatch = validCommands.Contains(cmdName);
 
+            // พิมพ์ตัวพิมพ์เล็ก/ใหญ่ผิด (Case Sensitive)
             if (caseMatch && !exactMatch)
             {
                 string correctCmd = validCommands.First(x => x.Equals(cmdName, System.StringComparison.OrdinalIgnoreCase));
@@ -395,6 +453,7 @@ void CreateDollUI(int index, Transform spot)
                 LockAndColorLastLine(cleanRawLine, false); yield break; 
             }
 
+            // สะกดผิด ไม่ตรงกับคำสั่งไหนเลย
             if (!exactMatch)
             {
                   string guess = "GoLeft";
@@ -405,6 +464,7 @@ void CreateDollUI(int index, Transform spot)
                   LockAndColorLastLine(cleanRawLine, false); yield break; 
             }
 
+            // ลืมใส่วงเล็บ หรือ ลืมปิดวงเล็บ
             if (!hasOpenParen || !hasCloseParen)
             {
                 if (!hasOpenParen) ShowError(3, "MissingParentheses", cleanRawLine, cmdName + "();", currentLineNum);
@@ -415,6 +475,7 @@ void CreateDollUI(int index, Transform spot)
             bool needNumber = (cmdName == "GoLeft" || cmdName == "GoRight" || cmdName == "MoveLeft" || cmdName == "MoveRight");
             bool noNumber = (cmdName == "MoveDown" || cmdName == "Grip");
 
+            // กรณีคำสั่งที่ต้องระบุระยะทางในวงเล็บ (ขยับซ้าย/ขวา)
             if (needNumber)
             {
                 if (string.IsNullOrEmpty(paramContent))
@@ -436,13 +497,15 @@ void CreateDollUI(int index, Transform spot)
                     LockAndColorLastLine(cleanRawLine, false); yield break; 
                 }
 
+                // พิมพ์ถูก สั่งการที่คีบให้ขยับ
                 commandHistory.Add(new CommandLog { commandText = cleanRawLine, isCorrect = true });
                 if (uiAudioSource && codeCorrectSound) uiAudioSource.PlayOneShot(codeCorrectSound);
 
-                LockAndColorLastLine(cleanRawLine, true); // พิมพ์ถูกเปลี่ยนเป็นสีเขียว
+                LockAndColorLastLine(cleanRawLine, true); 
                 if (cmdName.Contains("Left")) yield return claw.MoveHorizontal(-val);
                 else yield return claw.MoveHorizontal(val);
             }
+            // กรณีคำสั่งที่ไม่ต้องระบุตัวเลข (ลงล่าง, คีบ)
             else if (noNumber)
             {
                 if (!string.IsNullOrEmpty(paramContent))
@@ -451,12 +514,18 @@ void CreateDollUI(int index, Transform spot)
                     LockAndColorLastLine(cleanRawLine, false); yield break; 
                 }
 
+                // พิมพ์ถูก สั่งการที่คีบให้ขยับ
                 commandHistory.Add(new CommandLog { commandText = cleanRawLine, isCorrect = true });
                 if (uiAudioSource && codeCorrectSound) uiAudioSource.PlayOneShot(codeCorrectSound);
 
-                LockAndColorLastLine(cleanRawLine, true); // พิมพ์ถูกเปลี่ยนเป็นสีเขียว
+                LockAndColorLastLine(cleanRawLine, true); 
                 if (cmdName == "MoveDown") yield return claw.MoveDown();
-                else if (cmdName == "Grip") { yield return claw.GripAndUp(); CheckResult(); }
+                else if (cmdName == "Grip") 
+                { 
+                    hasGripped = true; // ล็อคทันทีที่สั่ง Grip สำเร็จ ป้องกันการขยับต่อ
+                    yield return claw.GripAndUp(); 
+                    CheckResult(); // ตรวจผลลัพธ์ว่าคีบได้หรือไม่ได้
+                }
             }
         }
         else
@@ -465,15 +534,11 @@ void CreateDollUI(int index, Transform spot)
         }
     }
 
-    // ==========================================
-    // 2. ฟังก์ชันระบายสีคำสั่งที่เพิ่งพิมพ์เสร็จ (สีเขียว/แดง)
-    // ==========================================
+    // ฟังก์ชันสำหรับใส่สีข้อความ (เขียว=ถูก, แดง=ผิด) และล็อคให้เป็นข้อความในอดีต ห้ามแก้ไข
     void LockAndColorLastLine(string rawLine, bool isCorrect)
     {
-        // เลือกสี (เขียวสำหรับถูก, แดงสำหรับผิด)
         string colorHex = isCorrect ? "#4CAF50" : "#F44336"; 
         
-        // ถ้ามีความยาวคำสั่งให้ทำการหาและแทนที่ด้วย Tag สี
         if (!string.IsNullOrEmpty(rawLine))
         {
             int lastIdx = codeInputField.text.LastIndexOf(rawLine);
@@ -482,7 +547,6 @@ void CreateDollUI(int index, Transform spot)
                 string coloredStr = $"<color={colorHex}>{rawLine}</color>";
                 string newText = codeInputField.text.Remove(lastIdx, rawLine.Length).Insert(lastIdx, coloredStr);
                 
-                // ขึ้นบรรทัดใหม่เตรียมให้พิมพ์คำสั่งถัดไป
                 if (!newText.EndsWith("\n")) newText += "\n";
                 codeInputField.SetTextWithoutNotify(newText);
             }
@@ -492,13 +556,31 @@ void CreateDollUI(int index, Transform spot)
              if (!codeInputField.text.EndsWith("\n")) codeInputField.SetTextWithoutNotify(codeInputField.text + "\n");
         }
         
-        // ล็อคข้อความกลายเป็นอดีต
         protectedPrefix = codeInputField.text;
         lastValidText = protectedPrefix;
         codeInputField.caretPosition = codeInputField.text.Length;
         isExecuting = false;
     }
 
+    // ---------------------------------------------------------
+    // ระบบแสดง Popups แจ้งเตือนต่างๆ และตรวจสอบผลแพ้ชนะ
+    // ---------------------------------------------------------
+
+    // ฟังก์ชันสำหรับปิดหน้าต่าง "ไม่ได้พิมพ์โค้ด" และกลับไปโฟกัสที่ช่องพิมพ์
+    void CloseEmptyInputPanel() 
+    { 
+        PlayButtonSound(); 
+        if (emptyInputPanel) emptyInputPanel.SetActive(false);
+        if (codeInputField) {
+            codeInputField.ActivateInputField(); 
+            codeInputField.caretPosition = codeInputField.text.Length;
+            codeInputField.selectionAnchorPosition = codeInputField.text.Length;
+            codeInputField.selectionFocusPosition = codeInputField.text.Length;
+        }
+        if (clawimage) clawimage.SetActive(true); 
+    }
+
+    // ฟังก์ชันเรียกหน้าต่าง Error Popup ขึ้นมาโชว์ พร้อมแสดงคำอธิบายสาเหตุ
     void ShowError(int id, string codeType, string userCode, string suggest, int lineNum = 0)
     {
         commandHistory.Add(new CommandLog { commandText = userCode, isCorrect = false });
@@ -531,12 +613,14 @@ void CreateDollUI(int index, Transform spot)
             case 6: title = "ExtraParameter (ใส่พารามิเตอร์เกิน)"; desc = "ในภาษาโปรแกรม พารามิเตอร์คือค่าตัวเลขที่ต้องการรับ จาก Error คุณใส่จำนวนตัวเลขที่ต้องการขยับตัวคีบเกิน"; break;
             case 7: title = "InvalidParameter (ใส่พารามิเตอร์ผิดรูปแบบ)"; desc = "ในภาษาโปรแกรม พารามิเตอร์คือค่าตัวเลขที่ต้องการรับ ห้ามใส่ค่าติดลบ"; break;
             case 8: title = "MissingSemicolon (ลืม ;)"; desc = "ในภาษาโปรแกรม ต้องมีการปิดท้ายในคำสั่ง โดยใช้เครื่องหมาย ; (semicolon)"; break;
+            case 9: title = "Already Gripped (สั่งคีบไปแล้ว)"; desc = "คุณได้สั่ง Grip(); เพื่อคีบไปแล้ว ไม่สามารถขยับหรือคีบซ้ำได้อีกในรอบนี้ กรุณาเริ่มเกมใหม่ครับ"; break;
         }
 
         if(errorTitleText) errorTitleText.text = title;
         if(errorDescText) errorDescText.text = desc;
     }
 
+    // ปิดหน้าต่าง Error เพื่อกลับไปแก้ตัวพิมพ์โค้ดใหม่
     void CloseErrorPanel() 
     { 
         PlayButtonSound(); 
@@ -550,6 +634,7 @@ void CreateDollUI(int index, Transform spot)
         if (clawimage) clawimage.SetActive(true); 
     }
 
+    // ประมวลผลหลังจากคีบ (Grip) ว่าคีบโดนตัวไหน และตรงเป้าหมายหรือไม่
     void CheckResult()
     {
         string caught = claw.GetCaughtDollName();
@@ -565,6 +650,7 @@ void CreateDollUI(int index, Transform spot)
             DataManager.Instance.AddNewUserLog(currentMission, commandCounter, sessionErrors.Count, duration, isWin, sessionErrors);
         }
 
+        // กรณีที่คีบโดนเป้าหมาย (ชนะ)
         if (isWin)
         {
             if (dropBoxTarget != null)
@@ -575,16 +661,19 @@ void CreateDollUI(int index, Transform spot)
             }
             else ShowWinPanel(dataIndex); 
         }
+        // กรณีคีบไม่โดนอะไรเลย (ว่าว)
         else if (isEmptyClaw)
         {
             ShowEmptyClawPanel();
         }
+        // กรณีคีบโดนตัวอื่น (แพ้)
         else 
         {
             ShowLosePanel(dataIndex);
         }
     }
 
+    // ฟังก์ชันโชว์หน้าต่างชนะ คีบถูกตัว
     void ShowWinPanel(int dataIndex)
     {
         if (uiAudioSource && winSound) uiAudioSource.PlayOneShot(winSound);
@@ -598,6 +687,7 @@ void CreateDollUI(int index, Transform spot)
         if (clawimage) clawimage.SetActive(false);
     }
 
+    // ฟังก์ชันโชว์หน้าต่างแพ้ คีบผิดตัว
     void ShowLosePanel(int dataIndex)
     {
         if (uiAudioSource && loseSound) uiAudioSource.PlayOneShot(loseSound);
@@ -612,6 +702,7 @@ void CreateDollUI(int index, Transform spot)
         if (clawimage) clawimage.SetActive(false);
     }
 
+    // ฟังก์ชันโชว์หน้าต่างคีบไม่ได้อะไรเลย
     void ShowEmptyClawPanel()
     {
         if (uiAudioSource && loseSound) uiAudioSource.PlayOneShot(loseSound); 
@@ -619,7 +710,11 @@ void CreateDollUI(int index, Transform spot)
         if (clawimage) clawimage.SetActive(false);
     }
 
-  public void ShowCodeResultPanel()
+    // ---------------------------------------------------------
+    // หน้าสรุปคำสั่ง (Code Result) และจบเกม
+    // ---------------------------------------------------------
+    // รวบรวมคำสั่งที่ผู้เล่นพิมพ์ทั้งหมดมาโชว์ในหน้า Result ตอนจบด่าน
+    public void ShowCodeResultPanel()
     {
         PlayButtonSound();
 
@@ -633,6 +728,7 @@ void CreateDollUI(int index, Transform spot)
         string strCorrect = "";
         string strIncorrect = "";
 
+        // วนลูปเพื่อแยกคำสั่งที่พิมพ์ถูก ออกจากคำสั่งที่พิมพ์ผิด
         foreach (var log in commandHistory)
         {
             if (log.isCorrect)
@@ -653,14 +749,13 @@ void CreateDollUI(int index, Transform spot)
 
         if (codeResultPanel) 
         {
-            // --- เพิ่มคำสั่งนี้เข้าไป 1 บรรทัดครับ ---
+            // ดึงหน้าต่าง Result ให้ขึ้นมาโชว์ทับสิ่งอื่นทั้งหมด
             codeResultPanel.transform.SetAsLastSibling(); 
-            // ------------------------------------
-            
             codeResultPanel.SetActive(true);
         }
     }
 
+    // ปุ่ม Replay เพื่อล้างค่าทั้งหมดแล้วเริ่มสุ่มภารกิจใหม่
     public void OnClickReplay()
     {
         PlayButtonSound(); 
@@ -668,10 +763,13 @@ void CreateDollUI(int index, Transform spot)
         commandCounter = 0;
         sessionErrors.Clear();
         commandHistory.Clear(); 
+        
+        hasGripped = false; // ปลดล็อคการคีบ
 
-        RandomizeMission();
+        RandomizeMission(); // สุ่มเป้าหมายใหม่
         if (codeResultPanel) codeResultPanel.SetActive(false);
         
+        // เคลียร์ช่องพิมพ์ให้ว่างเปล่า
         if (codeInputField) 
         {
             codeInputField.SetTextWithoutNotify("");
