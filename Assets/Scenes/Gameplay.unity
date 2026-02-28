@@ -4566,7 +4566,7 @@ MonoBehaviour:
   losePanel: {fileID: 307377540}
   loseDollImage: {fileID: 1652052793}
   defaultLoseSprite: {fileID: 0}
-  emptyClawPanel: {fileID: 0}
+  emptyClawPanel: {fileID: 635663897}
   codeResultPanel: {fileID: 1966548317}
   totalCommandText: {fileID: 6450273}
   allCommandsText: {fileID: 1954656160}
