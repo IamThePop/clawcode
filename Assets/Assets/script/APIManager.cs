@@ -7,7 +7,8 @@ public class APIManager : MonoBehaviour
 {
     // ⚠️ IMPORTANT: Change this URL to your actual Laravel API address
     // If testing on the same computer, keep localhost.
-    private string laravelAPIUrl = "https://clawcode.iappsilpakorn.com/";
+    private string laravelAPIUrl = "https://clawcode.iappsilpakorn.com/api/save-game-data"; 
+// หรือชื่อ route ที่คุณใช้รับข้อมูลใน GameDataController
 
     // Call this function to start the upload
     public void UploadUserData(string jsonPayload, string jsonDetail)
