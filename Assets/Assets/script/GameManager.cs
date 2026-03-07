@@ -86,6 +86,11 @@ public class GameManager : MonoBehaviour
     public GameObject movedDownErrorPanel;
     public Button closeMovedDownErrorButton;
 
+    // ✨ [อัปเดตใหม่] ระบบ Advance Mode
+    [Header("Advance Mode UI")]
+    public GameObject advanceModePanel;     // พาเนลที่จะเด้งขึ้นมา
+    public Button advanceModeButton;        // ปุ่มสำหรับกดเปิด/ปิด
+
     [Header("Audio Settings (เสียงระบบ)")]
     public AudioSource uiAudioSource;       
     public AudioClip buttonClickSound;      
@@ -161,6 +166,10 @@ public class GameManager : MonoBehaviour
         if (movedDownErrorPanel) movedDownErrorPanel.SetActive(false); 
         if (clawimage) clawimage.SetActive(false);
 
+        // ✨ [อัปเดตใหม่] ตั้งค่าเริ่มต้นให้ Advance Mode
+        if (advanceModePanel) advanceModePanel.SetActive(false); // ซ่อน Panel ไว้ตอนเริ่มเกม
+        if (advanceModeButton) advanceModeButton.onClick.AddListener(ToggleAdvanceMode); // ผูกปุ่มเข้ากับฟังก์ชัน
+
         RandomizeMission(); 
 
         if (closeErrorButton) closeErrorButton.onClick.AddListener(CloseErrorPanel);
@@ -180,6 +189,18 @@ public class GameManager : MonoBehaviour
     public void PlayButtonSound()
     {
         if (uiAudioSource && buttonClickSound) uiAudioSource.PlayOneShot(buttonClickSound);
+    }
+
+    // ✨ [อัปเดตใหม่] ฟังก์ชันสำหรับเปิด/ปิด Advance Mode Panel
+    public void ToggleAdvanceMode()
+    {
+        PlayButtonSound();
+        if (advanceModePanel != null)
+        {
+            // เช็คสถานะปัจจุบันว่าเปิดหรือปิดอยู่ แล้วสั่งให้เป็นค่าตรงข้าม
+            bool isActive = advanceModePanel.activeSelf;
+            advanceModePanel.SetActive(!isActive);
+        }
     }
 
     // ---------------------------------------------------------
